@@ -14,16 +14,17 @@ struct ModelsTests {
     }
 
     @Test func markTranscribed() {
-        var rec = Recording(title: "x")
+        var rec = Recording(title: "x", createdAt: Date(timeIntervalSince1970: 1000))
         rec.markTranscribed()
         #expect(rec.status == .transcribed)
-        #expect(rec.updatedAt >= rec.createdAt)
+        #expect(rec.updatedAt > rec.createdAt)
     }
 
     @Test func markSummarized() {
-        var rec = Recording(title: "x")
+        var rec = Recording(title: "x", createdAt: Date(timeIntervalSince1970: 1000))
         rec.markSummarized()
         #expect(rec.status == .summarized)
+        #expect(rec.updatedAt > rec.createdAt)
     }
 
     @Test func recordingCodableRoundTrip() throws {

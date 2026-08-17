@@ -26,7 +26,7 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
         duration: TimeInterval = 0,
         status: RecordingStatus = .recording,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -35,7 +35,7 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
         self.duration = duration
         self.status = status
         self.createdAt = createdAt
-        self.updatedAt = updatedAt
+        self.updatedAt = updatedAt ?? createdAt
     }
 
     public mutating func markTranscribed() {
