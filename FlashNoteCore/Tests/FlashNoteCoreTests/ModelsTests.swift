@@ -42,4 +42,28 @@ struct ModelsTests {
         let decoded = try JSONDecoder().decode(Recording.self, from: data)
         #expect(decoded == rec)
     }
+
+    @Test func segmentCodable() throws {
+        let seg = TranscriptSegment(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+            startTime: 12.5,
+            endTime: 15.0,
+            speaker: "李娜",
+            text: "纪要模板建议做成可自定义的。",
+            isFinal: true
+        )
+        let data = try JSONEncoder().encode(seg)
+        let decoded = try JSONDecoder().decode(TranscriptSegment.self, from: data)
+        #expect(decoded == seg)
+    }
+
+    @Test func transcriptAppendAndFullText() {
+        var t = Transcript(recordingID: UUID(), language: "zh-Hans")
+        #expect(t.fullText == "")
+        t.append(TranscriptSegment(startTime: 0, text: "第一句。"))
+        t.append(TranscriptSegment(startTime: 2, text: "第二句。"))
+        #expect(t.segments.count == 2)
+        #expect(t.fullText == "第一句。\n第二句。")
+        #expect(t.language == "zh-Hans")
+    }
 }
