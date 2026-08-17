@@ -592,6 +592,25 @@ struct TranscriptionServiceTests {
         try service.begin()
         #expect(service.lastError as? TranscriptionError == .engineFailed("boom"))
     }
+
+    @Test func nonFinalSegmentsAreDropped() throws {
+        final class PartialEngine: TranscriptionEngine {
+            let displayName = "Partial"
+            let isRealtime = true
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws {
+                onSegment?(TranscriptSegment(startTime: 0, text: "临时", isFinal: false))
+                onSegment?(TranscriptSegment(startTime: 0, text: "你好。", isFinal: true))
+                onSegment?(TranscriptSegment(startTime: 2, text: "还在想…", isFinal: false))
+            }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: PartialEngine())
+        try service.begin()
+        #expect(service.transcript.segments.count == 1)
+        #expect(service.transcript.fullText == "你好。")
+    }
 }
 ```
 
@@ -636,6 +655,11 @@ public protocol TranscriptionEngine: AnyObject {
 import Foundation
 
 /// 编排单个引擎：把引擎回调的段落累积进 Transcript，并对回调做线程安全保护。
+///
+/// 段落契约（防止流式引擎 partial→final 重复文本）：
+/// 本服务只追加 `isFinal == true` 的段落；非最终段（`isFinal == false`）由
+/// App 层引擎实现自行聚合（如用相同 startTime 替换临时段），仅在确定时
+/// 以 `isFinal == true` 回调。Mock 引擎（本包测试）直接回调最终段落。
 public final class TranscriptionService {
     public private(set) var transcript: Transcript
     public private(set) var lastError: Error?
@@ -647,7 +671,7 @@ public final class TranscriptionService {
         self.transcript = Transcript(recordingID: recordingID, language: language)
         self.engine = engine
         engine.onSegment = { [weak self] segment in
-            guard let self else { return }
+            guard let self, segment.isFinal else { return }
             self.lock.lock()
             self.transcript.append(segment)
             self.lock.unlock()
