@@ -2282,6 +2282,9 @@ Expected: 全量测试通过，提交成功。
 
 **4. 已知取舍：**
 - `FileRecordingStore.deleteRecording` 对不存在文件抛错（测试未覆盖该路径，符合当前需求）。
+- `deleteRecording` 不级联删除该录音的 `transcript-*` 与 `minutes-*` 文件（V1 接受；CloudKit 版本落地时按记录关系级联）。
+- `RecordingStore` 协议为同步 throws 签名；CloudKit 实现（后续计划）需桥接异步 API 或届时评估协议改造为 async。
+- 任一损坏文件会使对应前缀的列表读取整体抛错（无部分结果）；V1 采用"损坏即抛错"策略，后续可考虑跳过/隔离。
 - `fetchRecordings` 依赖 `contentsOfDirectory`，子目录中其他文件被忽略（前缀过滤）。
 - 测试使用 Swift Testing 而非 XCTest：CLT-only 机器（无 Xcode）的 macOS SDK 不含 XCTest.framework，Swift Testing 随 Swift 工具链一起提供。
 - 本机 `swift test` 需携带文档中的框架路径与 rpath 标志（`-F/path` 必须使用紧贴形式）；装有 Xcode 的机器上直接运行 `swift test` 即可，无需标志。
