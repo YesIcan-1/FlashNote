@@ -6,7 +6,7 @@
 
 **Architecture:** 核心层与 UI/平台 SDK 完全解耦。`TranscriptionEngine` 协议是转写通道的可插拔缝（App 层将提供 Apple Speech / Whisper / 云端三个实现，本包用 Mock 引擎测试服务逻辑）；`LLMClient` 协议封装 OpenAI 兼容 Chat Completions；`MinutesGenerator` 组合模板 + LLM + 分块器生成结构化纪要；`RecordingStore` 协议提供数据访问抽象，`FileRecordingStore` 是 JSON 文件实现（后续 CloudKit 实现替换时 UI 无感知）。
 
-**Tech Stack:** Swift 6.3 工具链、Swift Package（tools-version 5.10，Swift 5 语言模式以规避严格并发摩擦）、XCTest、URLSession + URLProtocol（测试桩）、Foundation Codable。
+**Tech Stack:** Swift 6.3 工具链、Swift Package（tools-version 5.10，Swift 5 语言模式以规避严格并发摩擦）、Swift Testing（本机无 Xcode/XCTest，见下方约定）、URLSession + URLProtocol（测试桩）、Foundation Codable。
 
 ## 测试框架约定（本机环境决定）
 
