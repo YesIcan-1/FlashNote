@@ -79,7 +79,7 @@ FlashNote 是一款面向 **macOS 与 iOS** 的录音 + 实时转写 + AI 纪要
 | `TranscriptSegment` | startTime, endTime, speaker（可选）, text, isFinal |
 | `Minutes` | id, recordingID, style, templateID, content（结构化 JSON）, model, promptVersion, generatedAt |
 | `Folder` | id, name, parentID, colorIndex, createdAt |
-| `MinutesTemplate` | id, name, isBuiltin, promptTemplate, outputStructure, createdAt |
+| `MinutesTemplate` | id, name, isBuiltin, sections（期望小节标题）, systemPrompt, userPromptTemplate（含 {transcript} 占位符） |
 
 ### 4.2 音频文件
 
