@@ -1465,6 +1465,30 @@ struct MinutesGeneratorTests {
         #expect(minutes.sections[1].title == "行动项")
     }
 
+    @Test func customTemplateWithoutPlaceholderStillGetsTranscript() async throws {
+        let client = MockLLMClient()
+        client.onComplete = { messages in
+            #expect(messages[1].content.contains("转写内容"))
+            #expect(messages[1].content.contains("这是一段待纪要的转写"))
+            #expect(messages[1].content.contains("不要新增其他小节"))
+            return "## 结论\nOK。\n## 行动项\n\n## 待跟进\n"
+        }
+        let template = MinutesTemplate(
+            id: "custom-no-placeholder",
+            name: "自定义",
+            isBuiltin: false,
+            sections: ["结论", "行动项", "待跟进"],
+            systemPrompt: "你是助手。",
+            userPromptTemplate: "请生成纪要。"
+        )
+        let minutes = try await MinutesGenerator(client: client).generate(
+            transcript: "这是一段待纪要的转写",
+            template: template,
+            recordingID: recordingID
+        )
+        #expect(minutes.sections[0].body == "OK。")
+    }
+
     @Test func longTranscriptChunkedBeforeFinalCall() async throws {
         let client = MockLLMClient()
         client.onComplete = { messages in
@@ -1644,10 +1668,17 @@ public struct MinutesGenerator {
     }
 
     private func makeUserPrompt(template: MinutesTemplate, transcript: String) -> String {
+        var prompt = template.userPromptTemplate
+        if prompt.contains("{transcript}") {
+            prompt = prompt.replacingOccurrences(of: "{transcript}", with: transcript)
+        } else {
+            // 自定义模板缺少占位符时，直接追加转写内容，避免静默丢失输入
+            prompt += "\n\n转写内容：\n\(transcript)"
+        }
         let headers = template.sections.map { "## \($0)" }.joined(separator: "\n")
-        return template.userPromptTemplate
-            .replacingOccurrences(of: "{transcript}", with: transcript)
-            + "\n\n必须使用以下小节标题：\n\(headers)"
+        // 钉死小节格式：防止模型输出 "## 结论：" / "### 结论" 变体导致分节解析静默丢失
+        prompt += "\n\n必须严格使用以下小节标题（Markdown 二级标题，标题后不加冒号或编号，不要新增其他小节）：\n\(headers)"
+        return prompt
     }
 
     /// 解析 LLM 输出的 Markdown，按 "## 标题" 提取各节；缺失的节补空。
@@ -1694,7 +1725,7 @@ cd FlashNoteCore && swift test \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
-Expected: `MinutesGeneratorTests` 全部通过（4 个测试）。
+Expected: `MinutesGeneratorTests` 全部通过（5 个测试）。
 
 - [ ] **Step 5: 提交**
 
