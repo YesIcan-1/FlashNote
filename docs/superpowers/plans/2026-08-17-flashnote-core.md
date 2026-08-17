@@ -1147,6 +1147,29 @@ struct TranscriptChunkerTests {
         #expect(chunks.count > 1)
         #expect(chunks.joined() == text)
     }
+
+    @Test func midTextOversizedSentenceHardSplit() {
+        // 句中超长句子（无标点）必须被硬切，块数 = 3、每块 ≤ maxChars
+        let text = "短句。" + String(repeating: "长", count: 150) + "。" + "尾句。"
+        let chunks = TranscriptChunker(maxChars: 100).chunk(text)
+        #expect(chunks.count == 3)
+        for chunk in chunks {
+            #expect(chunk.count <= 100)
+        }
+        #expect(chunks.joined() == text)
+    }
+
+    @Test func exactMaxCharsBoundary() {
+        // 恰好 maxChars 字符（末位为句号）→ 单个块
+        let text = String(repeating: "字", count: 99) + "。"
+        let chunks = TranscriptChunker(maxChars: 100).chunk(text)
+        #expect(chunks == [text])
+    }
+
+    @Test func leadingBreakAndConsecutiveBreaks() {
+        #expect(TranscriptChunker().chunk("。开头") == ["。开头"])
+        #expect(TranscriptChunker().chunk("。。。") == ["。。。"])
+    }
 }
 ```
 
@@ -1168,10 +1191,14 @@ Expected: 编译失败——找不到 `TranscriptChunker`。
 import Foundation
 
 /// 把长转写文本切成适合 LLM 的块：优先在句子边界（。！？!?\n）切分，超长块做硬切。
+///
+/// 算法：在 maxChars 字符窗口内取最后一个句边界作为切点；窗口内无句边界
+/// （单个句子超长，常见于稀疏标点的 ASR 输出）才硬切，保证每块 ≤ maxChars。
 public struct TranscriptChunker {
     public var maxChars: Int
 
     public init(maxChars: Int = 4000) {
+        precondition(maxChars > 0, "maxChars 必须为正数")
         self.maxChars = maxChars
     }
 
@@ -1180,30 +1207,28 @@ public struct TranscriptChunker {
     public func chunk(_ text: String) -> [String] {
         guard !text.isEmpty else { return [] }
         var chunks: [String] = []
-        var current = ""
-        var buffer = ""
+        var start = text.startIndex
 
-        for char in text {
-            buffer.append(char)
-            guard let scalar = char.unicodeScalars.first, breaks.contains(scalar) else { continue }
-            if !current.isEmpty && current.count + buffer.count > maxChars {
-                chunks.append(current)
-                current = ""
+        while start < text.endIndex {
+            let windowEnd = text.index(start, offsetBy: maxChars, limitedBy: text.endIndex) ?? text.endIndex
+            let window = text[start..<windowEnd]
+            if let lastBreak = findLastBreak(in: window) {
+                let chunkEnd = text.index(after: lastBreak)
+                chunks.append(String(text[start..<chunkEnd]))
+                start = chunkEnd
+            } else {
+                chunks.append(String(window))
+                start = windowEnd
             }
-            current += buffer
-            buffer = ""
-        }
-        current += buffer
-
-        while current.count > maxChars {
-            let cut = current.index(current.startIndex, offsetBy: maxChars)
-            chunks.append(String(current[..<cut]))
-            current = String(current[cut...])
-        }
-        if !current.isEmpty {
-            chunks.append(current)
         }
         return chunks
+    }
+
+    private func findLastBreak(in range: Substring) -> String.Index? {
+        range.lastIndex { char in
+            guard let scalar = char.unicodeScalars.first else { return false }
+            return breaks.contains(scalar)
+        }
     }
 }
 ```
@@ -1216,7 +1241,7 @@ cd FlashNoteCore && swift test \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
-Expected: `TranscriptChunkerTests` 全部通过（5 个测试）。
+Expected: `TranscriptChunkerTests` 全部通过（8 个测试）。
 
 - [ ] **Step 5: 提交**
 
