@@ -81,4 +81,58 @@ struct TranscriptionServiceTests {
         #expect(service.transcript.segments.count == 1)
         #expect(service.transcript.fullText == "你好。")
     }
+
+    @Test func asyncSegmentAfterBegin() async throws {
+        final class AsyncEngine: TranscriptionEngine {
+            let displayName = "Async"
+            let isRealtime = true
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws {
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.onSegment?(TranscriptSegment(startTime: 0, text: "异步段落。"))
+                }
+            }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: AsyncEngine())
+        try service.begin()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(service.transcript.segments.count == 1)
+        #expect(service.transcript.fullText == "异步段落。")
+    }
+
+    @Test func concurrentAppendsStress() throws {
+        final class BurstEngine: TranscriptionEngine {
+            let displayName = "Burst"
+            let isRealtime = true
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws {
+                let total = 200
+                DispatchQueue.concurrentPerform(iterations: total) { i in
+                    self.onSegment?(TranscriptSegment(startTime: TimeInterval(i), text: "段\(i)"))
+                }
+            }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: BurstEngine())
+        try service.begin()
+        // concurrentPerform 同步阻塞至全部完成；NSLock 保护下不应丢失任何段落
+        #expect(service.transcript.segments.count == 200)
+    }
+
+    @Test func beginThrowIsRecorded() {
+        final class ThrowingEngine: TranscriptionEngine {
+            let displayName = "Throwing"
+            let isRealtime = false
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws { throw TranscriptionError.engineUnavailable }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: ThrowingEngine())
+        #expect(throws: TranscriptionError.self) { try service.begin() }
+        #expect(service.lastError as? TranscriptionError == .engineUnavailable)
+    }
 }

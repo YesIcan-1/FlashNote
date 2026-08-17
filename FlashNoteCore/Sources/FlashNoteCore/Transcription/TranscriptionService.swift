@@ -6,37 +6,62 @@ import Foundation
 /// 本服务只追加 `isFinal == true` 的段落；非最终段（`isFinal == false`）由
 /// App 层引擎实现自行聚合（如用相同 startTime 替换临时段），仅在确定时
 /// 以 `isFinal == true` 回调。Mock 引擎（本包测试）直接回调最终段落。
+///
+/// 线程安全：所有状态（_transcript / _lastError）的读写都在 lock 保护下进行；
+/// 引擎回调可来自任意队列。调用方应在调用 finish() 前先停止引擎，
+/// 确保没有回调在途（晚到的段落不会进入已返回的快照）。
 public final class TranscriptionService {
-    public private(set) var transcript: Transcript
-    public private(set) var lastError: Error?
+    private var _transcript: Transcript
+    private var _lastError: Error?
 
     private let engine: TranscriptionEngine
     private let lock = NSLock()
 
     public init(recordingID: UUID, engine: TranscriptionEngine, language: String = "zh-Hans") {
-        self.transcript = Transcript(recordingID: recordingID, language: language)
+        self._transcript = Transcript(recordingID: recordingID, language: language)
         self.engine = engine
         engine.onSegment = { [weak self] segment in
             guard let self, segment.isFinal else { return }
             self.lock.lock()
-            self.transcript.append(segment)
+            self._transcript.append(segment)
             self.lock.unlock()
         }
         engine.onError = { [weak self] error in
-            self?.lastError = error
+            self?.setLastError(error)
         }
     }
 
+    public var transcript: Transcript {
+        lock.lock(); defer { lock.unlock() }
+        return _transcript
+    }
+
+    public var lastError: Error? {
+        lock.lock(); defer { lock.unlock() }
+        return _lastError
+    }
+
     public func begin() throws {
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            setLastError(error)
+            throw error
+        }
     }
 
     public func cancel() {
         engine.cancel()
     }
 
-    /// 结束转写，返回最终 Transcript。
+    /// 结束转写，返回最终 Transcript 快照。
     public func finish() -> Transcript {
         transcript
+    }
+
+    private func setLastError(_ error: Error) {
+        lock.lock()
+        _lastError = error
+        lock.unlock()
     }
 }
