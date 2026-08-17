@@ -611,6 +611,60 @@ struct TranscriptionServiceTests {
         #expect(service.transcript.segments.count == 1)
         #expect(service.transcript.fullText == "你好。")
     }
+
+    @Test func asyncSegmentAfterBegin() async throws {
+        final class AsyncEngine: TranscriptionEngine {
+            let displayName = "Async"
+            let isRealtime = true
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws {
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.onSegment?(TranscriptSegment(startTime: 0, text: "异步段落。"))
+                }
+            }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: AsyncEngine())
+        try service.begin()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(service.transcript.segments.count == 1)
+        #expect(service.transcript.fullText == "异步段落。")
+    }
+
+    @Test func concurrentAppendsStress() throws {
+        final class BurstEngine: TranscriptionEngine {
+            let displayName = "Burst"
+            let isRealtime = true
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws {
+                let total = 200
+                DispatchQueue.concurrentPerform(iterations: total) { i in
+                    self.onSegment?(TranscriptSegment(startTime: TimeInterval(i), text: "段\(i)"))
+                }
+            }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: BurstEngine())
+        try service.begin()
+        // concurrentPerform 同步阻塞至全部完成；NSLock 保护下不应丢失任何段落
+        #expect(service.transcript.segments.count == 200)
+    }
+
+    @Test func beginThrowIsRecorded() {
+        final class ThrowingEngine: TranscriptionEngine {
+            let displayName = "Throwing"
+            let isRealtime = false
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws { throw TranscriptionError.engineUnavailable }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: ThrowingEngine())
+        #expect(throws: TranscriptionError.self) { try service.begin() }
+        #expect(service.lastError as? TranscriptionError == .engineUnavailable)
+    }
 }
 ```
 
@@ -660,38 +714,63 @@ import Foundation
 /// 本服务只追加 `isFinal == true` 的段落；非最终段（`isFinal == false`）由
 /// App 层引擎实现自行聚合（如用相同 startTime 替换临时段），仅在确定时
 /// 以 `isFinal == true` 回调。Mock 引擎（本包测试）直接回调最终段落。
+///
+/// 线程安全：所有状态（_transcript / _lastError）的读写都在 lock 保护下进行；
+/// 引擎回调可来自任意队列。调用方应在调用 finish() 前先停止引擎，
+/// 确保没有回调在途（晚到的段落不会进入已返回的快照）。
 public final class TranscriptionService {
-    public private(set) var transcript: Transcript
-    public private(set) var lastError: Error?
+    private var _transcript: Transcript
+    private var _lastError: Error?
 
     private let engine: TranscriptionEngine
     private let lock = NSLock()
 
     public init(recordingID: UUID, engine: TranscriptionEngine, language: String = "zh-Hans") {
-        self.transcript = Transcript(recordingID: recordingID, language: language)
+        self._transcript = Transcript(recordingID: recordingID, language: language)
         self.engine = engine
         engine.onSegment = { [weak self] segment in
             guard let self, segment.isFinal else { return }
             self.lock.lock()
-            self.transcript.append(segment)
+            self._transcript.append(segment)
             self.lock.unlock()
         }
         engine.onError = { [weak self] error in
-            self?.lastError = error
+            self?.setLastError(error)
         }
     }
 
+    public var transcript: Transcript {
+        lock.lock(); defer { lock.unlock() }
+        return _transcript
+    }
+
+    public var lastError: Error? {
+        lock.lock(); defer { lock.unlock() }
+        return _lastError
+    }
+
     public func begin() throws {
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            setLastError(error)
+            throw error
+        }
     }
 
     public func cancel() {
         engine.cancel()
     }
 
-    /// 结束转写，返回最终 Transcript。
+    /// 结束转写，返回最终 Transcript 快照。
     public func finish() -> Transcript {
         transcript
+    }
+
+    private func setLastError(_ error: Error) {
+        lock.lock()
+        _lastError = error
+        lock.unlock()
     }
 }
 ```
@@ -704,7 +783,7 @@ cd FlashNoteCore && swift test \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
-Expected: `TranscriptionServiceTests` 全部通过。
+Expected: `TranscriptionServiceTests` 全部通过（8 个测试）。
 
 - [ ] **Step 5: 提交**
 
