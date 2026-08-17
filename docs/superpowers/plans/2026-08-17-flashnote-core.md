@@ -1212,7 +1212,9 @@ public struct TranscriptChunker {
         while start < text.endIndex {
             let windowEnd = text.index(start, offsetBy: maxChars, limitedBy: text.endIndex) ?? text.endIndex
             let window = text[start..<windowEnd]
-            if let lastBreak = findLastBreak(in: window) {
+            // 仅把窗口内部的句边界作为切点；窗口首字符若是标点（如"。开头"），
+            // 让它随下文保留，避免切出孤立的单字符块。
+            if let lastBreak = findLastBreak(in: window), lastBreak > window.startIndex {
                 let chunkEnd = text.index(after: lastBreak)
                 chunks.append(String(text[start..<chunkEnd]))
                 start = chunkEnd
