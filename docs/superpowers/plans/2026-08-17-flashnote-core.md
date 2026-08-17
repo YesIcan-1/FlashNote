@@ -1437,6 +1437,7 @@ struct MinutesGeneratorTests {
             #expect(messages.count == 2) // system + user
             #expect(messages[0].role == .system)
             #expect(messages[1].content.contains("转写内容"))
+            #expect(messages[1].content.contains("不要新增其他小节"))
             return """
             ## 结论
             通过可插拔转写架构。
