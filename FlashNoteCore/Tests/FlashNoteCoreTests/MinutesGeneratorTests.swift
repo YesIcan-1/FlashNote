@@ -147,4 +147,24 @@ struct MinutesGeneratorTests {
         let decoded = try JSONDecoder().decode(Minutes.self, from: data)
         #expect(decoded == minutes)
     }
+
+    @Test func parseSectionsToleratesHeaderVariants() {
+        let output = """
+        开头前言（应被丢弃）。
+
+        ##结论
+        结论正文。
+
+        ### 行动项
+        行动项正文。
+
+        ## 待跟进：
+        待跟进正文。
+        """
+        let sections = MinutesGenerator.parseSections(output, expected: ["结论", "行动项", "待跟进"])
+        #expect(sections.count == 3)
+        #expect(sections[0].body.contains("结论正文"))
+        #expect(sections[1].body.contains("行动项正文"))
+        #expect(sections[2].body.contains("待跟进正文"))
+    }
 }

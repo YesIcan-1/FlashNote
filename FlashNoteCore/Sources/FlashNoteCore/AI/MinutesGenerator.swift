@@ -108,7 +108,7 @@ public struct MinutesGenerator {
         return prompt
     }
 
-    /// 解析 LLM 输出的 Markdown，按 "## 标题" 提取各节；缺失的节补空。
+    /// 解析 LLM 输出的 Markdown，按 "## 标题"（容忍 "##标题"/"### 标题"/"## 标题：" 变体）提取各节；缺失的节补空。
     static func parseSections(_ output: String, expected: [String]) -> [MinutesSection] {
         var found: [MinutesSection] = []
         var currentTitle: String?
@@ -126,9 +126,9 @@ public struct MinutesGenerator {
 
         for line in output.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("## ") {
+            if let title = Self.headerTitle(from: trimmed) {
                 flush()
-                currentTitle = String(trimmed.dropFirst(3))
+                currentTitle = title
             } else if currentTitle != nil {
                 currentBody.append(line)
             }
@@ -140,5 +140,17 @@ public struct MinutesGenerator {
             byTitle[section.title] = section.body
         }
         return expected.map { MinutesSection(title: $0, body: byTitle[$0] ?? "") }
+    }
+
+    /// 把 Markdown 标题行规范化为小节标题：容忍 "##标题"、"### 标题"、尾部冒号（：/:）；非标题行返回 nil。
+    static func headerTitle(from line: String) -> String? {
+        guard line.hasPrefix("#") else { return nil }
+        var rest = line
+        while rest.hasPrefix("#") { rest.removeFirst() }
+        let title = rest.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return nil }
+        let normalized = title.trimmingCharacters(in: CharacterSet(charactersIn: "：:"))
+        guard !normalized.isEmpty else { return nil }
+        return normalized
     }
 }
