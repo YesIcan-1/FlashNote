@@ -64,9 +64,11 @@ FlashNote 是一款面向 **macOS 与 iOS** 的录音 + 实时转写 + AI 纪要
 ### 3.1 关键接口
 
 - `TranscriptionEngine` 协议：`start/appendAudio/pause/stop`、`onSegment(_:)`、`isRealtime`。三个实现：`SpeechEngine`（实时）、`WhisperEngine`（整段）、`CloudASREngine`（实时或整段，取决于后端能力）。
+  - **已实现决策（核心包 v0.1）**：核心协议保持最小化 `start()/cancel()` + `onSegment/onError` 回调；**音频采集与暂停由各引擎实现自行负责**（如 Speech 引擎内联 AVAudioEngine 采集，暂停即暂停采集）。App 阶段如需优雅停止（区别于取消），以协议扩展默认实现补 `stop()`；不向核心塞入 `appendAudio`（音频不经过核心层）。
+  - **App 阶段待补**：实时转写 UI 需要直播观察通道——`TranscriptionService` 需暴露 `onNewSegment` 回调（或 AsyncStream），供"最新一段高亮/滚动"使用；当前核心只有快照轮询。
 - `LLMClient`：`complete(prompt:messages:) -> AsyncThrowingStream<String, Error>`，封装 OpenAI 兼容协议，支持流式与非流式。
-- `MinutesGenerator`：输入转写文本 + `MinutesTemplate`，输出结构化纪要。
-- `RecordingStore`：统一的数据访问层，内部决定走 CloudKit 还是本地降级。
+- `MinutesGenerator`：输入转写文本 + `MinutesTemplate`，输出结构化纪要。当前用非流式 `complete()`；App 阶段纪要流式展示可走 `LLMClient.stream`。
+- `RecordingStore`：统一的数据访问层，内部决定走 CloudKit 还是本地降级。核心 v0.1 为同步签名；CloudKit 实现需桥接异步或届时评估协议改造。
 
 ## 4. 数据模型
 
