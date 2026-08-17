@@ -8,6 +8,38 @@
 
 **Tech Stack:** Swift 6.3 工具链、Swift Package（tools-version 5.10，Swift 5 语言模式以规避严格并发摩擦）、XCTest、URLSession + URLProtocol（测试桩）、Foundation Codable。
 
+## 测试框架约定（本机环境决定）
+
+本机仅安装 Command Line Tools（无 Xcode），其 macOS SDK **不含 XCTest.framework**（XCTest 只随 Xcode 一起提供）。因此本计划的全部测试使用 **Swift Testing**——它随 Swift 工具链一起发布，不依赖 Xcode。
+
+本机运行 `swift test` 必须显式传入框架路径与 rpath 标志（已验证可行）：
+
+```bash
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
+```
+
+注意：`-F` 标志必须使用紧贴形式（`-F/path`），不能写成 `-F /path`，否则 SwiftPM 会拒绝。装有 Xcode 的机器上直接运行 `swift test` 即可，无需任何标志。
+
+XCTest → Swift Testing 映射：
+
+| XCTest | Swift Testing |
+| --- | --- |
+| `import XCTest` + `final class XTests: XCTestCase` | `import Testing` + `struct XTests`（或 `@Suite struct`） |
+| `func testFoo() { XCTAssertEqual(a, b) }` | `@Test func foo() { #expect(a == b) }` |
+| `XCTAssertTrue(x)` / `XCTAssertFalse(x)` | `#expect(x)` / `#expect(!x)` |
+| `XCTAssertNil(x)` / `XCTAssertNotNil(x)` | `#expect(x == nil)` / `#expect(x != nil)` |
+| `XCTAssertGreaterThan(a, b)` / `XCTAssertLessThanOrEqual(a, b)` | `#expect(a > b)` / `#expect(a <= b)` |
+| `XCTAssertThrowsError(expr) { error in XCTAssertEqual(error as? T, e) }` | `#expect(throws: T.self) { try expr }`，或 do/catch + `Issue.record` 做具体 case 检查 |
+| `XCTAssertEqual(a, b)`（数组 / 字符串） | `#expect(a == b)` |
+| `setUp()` / `tearDown()` 实例生命周期 | `init() throws` / `deinit` |
+| 异步测试 | `@Test func foo() async throws` 原生支持 |
+| `XCTFail("msg")` | `Issue.record("msg")` |
+
+下文 Task 1-11 中的所有测试代码片段均以 Swift Testing 编写；生产代码不受影响。
+
 **环境前置检查（Step 1 中执行）：**
 - 本机已安装 Swift 工具链（`swift --version` 输出 Swift 6.x）。
 - 本机**未安装 Xcode**（`xcodebuild` 不可用）——本计划全部命令只依赖 `swift build` / `swift test`，不受影响。
@@ -100,12 +132,14 @@ public enum FlashNoteCore {
 `FlashNoteCore/Tests/FlashNoteCoreTests/FlashNoteCoreTests.swift`:
 
 ```swift
-import XCTest
+// XCTest is unavailable on machines with only Command Line Tools (no Xcode);
+// Swift Testing ships with the Swift toolchain itself.
+import Testing
 @testable import FlashNoteCore
 
-final class FlashNoteCoreTests: XCTestCase {
-    func testVersion() {
-        XCTAssertEqual(FlashNoteCore.version, "0.1.0")
+struct FlashNoteCoreTests {
+    @Test func version() {
+        #expect(FlashNoteCore.version == "0.1.0")
     }
 }
 ```
@@ -113,9 +147,12 @@ final class FlashNoteCoreTests: XCTestCase {
 - [ ] **Step 4: 构建并测试**
 
 ```bash
-cd FlashNoteCore && swift build && swift test
+cd FlashNoteCore && swift build && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
-Expected: 构建成功；`FlashNoteCoreTests.testVersion` 通过。
+Expected: 构建成功；`FlashNoteCoreTests.version` 通过。
 
 - [ ] **Step 5: 提交**
 
@@ -136,34 +173,34 @@ cd .. && git add FlashNoteCore && git commit -m "feat: scaffold FlashNoteCore pa
 `FlashNoteCore/Tests/FlashNoteCoreTests/ModelsTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
-final class ModelsTests: XCTestCase {
-    func testRecordingDefaults() {
+struct ModelsTests {
+    @Test func recordingDefaults() {
         let rec = Recording(title: "周会纪要")
-        XCTAssertEqual(rec.status, .recording)
-        XCTAssertEqual(rec.duration, 0)
-        XCTAssertNil(rec.folderID)
-        XCTAssertNil(rec.audioFilename)
-        XCTAssertEqual(rec.title, "周会纪要")
-        XCTAssertEqual(rec.updatedAt, rec.createdAt)
+        #expect(rec.status == .recording)
+        #expect(rec.duration == 0)
+        #expect(rec.folderID == nil)
+        #expect(rec.audioFilename == nil)
+        #expect(rec.title == "周会纪要")
+        #expect(rec.updatedAt == rec.createdAt)
     }
 
-    func testMarkTranscribed() {
+    @Test func markTranscribed() {
         var rec = Recording(title: "x")
         rec.markTranscribed()
-        XCTAssertEqual(rec.status, .transcribed)
-        XCTAssertGreaterThanOrEqual(rec.updatedAt, rec.createdAt)
+        #expect(rec.status == .transcribed)
+        #expect(rec.updatedAt >= rec.createdAt)
     }
 
-    func testMarkSummarized() {
+    @Test func markSummarized() {
         var rec = Recording(title: "x")
         rec.markSummarized()
-        XCTAssertEqual(rec.status, .summarized)
+        #expect(rec.status == .summarized)
     }
 
-    func testRecordingCodableRoundTrip() throws {
+    @Test func recordingCodableRoundTrip() throws {
         let rec = Recording(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
             title: "测试",
@@ -176,7 +213,7 @@ final class ModelsTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(rec)
         let decoded = try JSONDecoder().decode(Recording.self, from: data)
-        XCTAssertEqual(decoded, rec)
+        #expect(decoded == rec)
     }
 }
 ```
@@ -184,7 +221,10 @@ final class ModelsTests: XCTestCase {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `Recording` 类型。
 
@@ -248,7 +288,10 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: `ModelsTests` 全部通过（4 个测试）。
 
@@ -271,7 +314,7 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add Recording model"
 在 `ModelsTests.swift` 的类末尾（最后一个 `}` 之前）追加：
 
 ```swift
-    func testSegmentCodable() throws {
+    @Test func segmentCodable() throws {
         let seg = TranscriptSegment(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
             startTime: 12.5,
@@ -282,24 +325,27 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add Recording model"
         )
         let data = try JSONEncoder().encode(seg)
         let decoded = try JSONDecoder().decode(TranscriptSegment.self, from: data)
-        XCTAssertEqual(decoded, seg)
+        #expect(decoded == seg)
     }
 
-    func testTranscriptAppendAndFullText() {
+    @Test func transcriptAppendAndFullText() {
         var t = Transcript(recordingID: UUID(), language: "zh-Hans")
-        XCTAssertEqual(t.fullText, "")
+        #expect(t.fullText == "")
         t.append(TranscriptSegment(startTime: 0, text: "第一句。"))
         t.append(TranscriptSegment(startTime: 2, text: "第二句。"))
-        XCTAssertEqual(t.segments.count, 2)
-        XCTAssertEqual(t.fullText, "第一句。\n第二句。")
-        XCTAssertEqual(t.language, "zh-Hans")
+        #expect(t.segments.count == 2)
+        #expect(t.fullText == "第一句。\n第二句。")
+        #expect(t.language == "zh-Hans")
     }
 ```
 
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `TranscriptSegment` / `Transcript`。
 
@@ -372,7 +418,10 @@ public struct Transcript: Codable, Identifiable, Equatable, Sendable {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 全部测试通过。
 
@@ -393,7 +442,7 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add Transcript model"
 - [ ] **Step 1: 追加失败测试**
 
 ```swift
-    func testFolderCodable() throws {
+    @Test func folderCodable() throws {
         let folder = Folder(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
             name: "工作",
@@ -403,15 +452,18 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add Transcript model"
         )
         let data = try JSONEncoder().encode(folder)
         let decoded = try JSONDecoder().decode(Folder.self, from: data)
-        XCTAssertEqual(decoded, folder)
-        XCTAssertEqual(decoded.name, "工作")
+        #expect(decoded == folder)
+        #expect(decoded.name == "工作")
     }
 ```
 
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `Folder`。
 
@@ -449,7 +501,10 @@ public struct Folder: Codable, Identifiable, Equatable, Sendable {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 全部测试通过。
 
@@ -473,7 +528,7 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add Folder model"
 `FlashNoteCore/Tests/FlashNoteCoreTests/TranscriptionServiceTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
 /// 测试替身：start 时同步发出两个段落。
@@ -496,32 +551,32 @@ final class MockTranscriptionEngine: TranscriptionEngine {
     }
 }
 
-final class TranscriptionServiceTests: XCTestCase {
-    func testBeginAppendsSegments() throws {
+struct TranscriptionServiceTests {
+    @Test func beginAppendsSegments() throws {
         let engine = MockTranscriptionEngine()
         let service = TranscriptionService(recordingID: UUID(), engine: engine)
         try service.begin()
-        XCTAssertTrue(engine.started)
-        XCTAssertEqual(service.transcript.segments.count, 2)
-        XCTAssertEqual(service.transcript.fullText, "你好。\n这是一段测试转写。")
+        #expect(engine.started)
+        #expect(service.transcript.segments.count == 2)
+        #expect(service.transcript.fullText == "你好。\n这是一段测试转写。")
     }
 
-    func testFinishReturnsTranscript() throws {
+    @Test func finishReturnsTranscript() throws {
         let service = TranscriptionService(recordingID: UUID(), engine: MockTranscriptionEngine())
         try service.begin()
         let transcript = service.finish()
-        XCTAssertEqual(transcript.segments.count, 2)
+        #expect(transcript.segments.count == 2)
     }
 
-    func testCancelStopsEngine() throws {
+    @Test func cancelStopsEngine() throws {
         let engine = MockTranscriptionEngine()
         let service = TranscriptionService(recordingID: UUID(), engine: engine)
         try service.begin()
         service.cancel()
-        XCTAssertTrue(engine.cancelled)
+        #expect(engine.cancelled)
     }
 
-    func testEngineErrorIsCaptured() throws {
+    @Test func engineErrorIsCaptured() throws {
         final class FailingEngine: TranscriptionEngine {
             let displayName = "Failing"
             let isRealtime = false
@@ -534,7 +589,7 @@ final class TranscriptionServiceTests: XCTestCase {
         }
         let service = TranscriptionService(recordingID: UUID(), engine: FailingEngine())
         try service.begin()
-        XCTAssertEqual(service.lastError as? TranscriptionError, .engineFailed("boom"))
+        #expect(service.lastError as? TranscriptionError == .engineFailed("boom"))
     }
 }
 ```
@@ -542,7 +597,10 @@ final class TranscriptionServiceTests: XCTestCase {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `TranscriptionEngine` / `TranscriptionService`。
 
@@ -616,7 +674,10 @@ public final class TranscriptionService {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: `TranscriptionServiceTests` 全部通过。
 
@@ -640,7 +701,7 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add transcription engine 
 `FlashNoteCore/Tests/FlashNoteCoreTests/OpenAICompatibleClientTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
 /// URLProtocol 桩：捕获请求并返回预设响应。
@@ -668,7 +729,7 @@ final class MockURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-final class OpenAICompatibleClientTests: XCTestCase {
+struct OpenAICompatibleClientTests {
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
@@ -684,28 +745,28 @@ final class OpenAICompatibleClientTests: XCTestCase {
         )
     }
 
-    func testCompleteParsesContent() async throws {
+    @Test func completeParsesContent() async throws {
         let json = """
         {"choices":[{"message":{"role":"assistant","content":"会议结论：通过。"}}]}
         """
         MockURLProtocol.requestHandler = { request in
-            XCTAssertEqual(request.url?.path, "/chat/completions")
-            XCTAssertEqual(request.httpMethod, "POST")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-key")
+            #expect(request.url?.path == "/chat/completions")
+            #expect(request.httpMethod == "POST")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key")
             let body = request.httpBody ?? Data()
             let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-            XCTAssertEqual(obj?["model"] as? String, "deepseek-chat")
-            XCTAssertEqual(obj?["stream"] as? Bool, false)
+            #expect(obj?["model"] as? String == "deepseek-chat")
+            #expect(obj?["stream"] as? Bool == false)
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (response, json.data(using: .utf8)!)
         }
         let client = OpenAICompatibleClient(configuration: makeConfig(), session: makeSession())
         let result = try await client.complete(messages: [ChatMessage(role: .user, content: "hi")])
-        XCTAssertEqual(result, "会议结论：通过。")
-        XCTAssertEqual(client.modelName, "deepseek-chat")
+        #expect(result == "会议结论：通过。")
+        #expect(client.modelName == "deepseek-chat")
     }
 
-    func testCompleteThrowsOnHTTPError() async {
+    @Test func completeThrowsOnHTTPError() async {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
             return (response, Data())
@@ -713,15 +774,15 @@ final class OpenAICompatibleClientTests: XCTestCase {
         let client = OpenAICompatibleClient(configuration: makeConfig(), session: makeSession())
         do {
             _ = try await client.complete(messages: [])
-            XCTFail("应当抛出错误")
+            Issue.record("应当抛出错误")
         } catch let error as LLMError {
-            XCTAssertEqual(error, .httpStatus(401))
+            #expect(error == .httpStatus(401))
         } catch {
-            XCTFail("错误的错误类型: \(error)")
+            Issue.record("错误的错误类型: \(error)")
         }
     }
 
-    func testStreamParsesSSE() async throws {
+    @Test func streamParsesSSE() async throws {
         let sse = """
         data: {"choices":[{"delta":{"content":"你"}}]}
 
@@ -732,7 +793,7 @@ final class OpenAICompatibleClientTests: XCTestCase {
         """
         MockURLProtocol.requestHandler = { request in
             let obj = try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any]
-            XCTAssertEqual(obj?["stream"] as? Bool, true)
+            #expect(obj?["stream"] as? Bool == true)
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (response, sse.data(using: .utf8)!)
         }
@@ -741,10 +802,10 @@ final class OpenAICompatibleClientTests: XCTestCase {
         for try await piece in client.stream(messages: []) {
             collected += piece
         }
-        XCTAssertEqual(collected, "你好")
+        #expect(collected == "你好")
     }
 
-    func testStreamThrowsOnHTTPError() async {
+    @Test func streamThrowsOnHTTPError() async {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: nil)!
             return (response, Data())
@@ -752,11 +813,11 @@ final class OpenAICompatibleClientTests: XCTestCase {
         let client = OpenAICompatibleClient(configuration: makeConfig(), session: makeSession())
         do {
             for try await _ in client.stream(messages: []) {}
-            XCTFail("应当抛出错误")
+            Issue.record("应当抛出错误")
         } catch let error as LLMError {
-            XCTAssertEqual(error, .httpStatus(429))
+            #expect(error == .httpStatus(429))
         } catch {
-            XCTFail("错误的错误类型: \(error)")
+            Issue.record("错误的错误类型: \(error)")
         }
     }
 }
@@ -765,7 +826,10 @@ final class OpenAICompatibleClientTests: XCTestCase {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `ChatMessage` / `LLMConfiguration` / `LLMClient` / `OpenAICompatibleClient`。
 
@@ -910,7 +974,10 @@ public final class OpenAICompatibleClient: LLMClient, @unchecked Sendable {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: `OpenAICompatibleClientTests` 全部通过（4 个测试）。
 
@@ -933,48 +1000,48 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add OpenAI-compatible LLM
 `FlashNoteCore/Tests/FlashNoteCoreTests/TranscriptChunkerTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
-final class TranscriptChunkerTests: XCTestCase {
-    func testEmptyText() {
-        XCTAssertEqual(TranscriptChunker().chunk(""), [])
+struct TranscriptChunkerTests {
+    @Test func emptyText() {
+        #expect(TranscriptChunker().chunk("") == [])
     }
 
-    func testShortTextSingleChunk() {
+    @Test func shortTextSingleChunk() {
         let text = "第一句。第二句！第三句？"
-        XCTAssertEqual(TranscriptChunker(maxChars: 100).chunk(text), [text])
+        #expect(TranscriptChunker(maxChars: 100).chunk(text) == [text])
     }
 
-    func testLongTextSplitsAtSentenceBoundaries() {
+    @Test func longTextSplitsAtSentenceBoundaries() {
         var text = ""
         for i in 0..<50 {
             text += "第\(i)句是一段完整的话。"
         }
         let chunks = TranscriptChunker(maxChars: 100).chunk(text)
-        XCTAssertGreaterThan(chunks.count, 1)
+        #expect(chunks.count > 1)
         for chunk in chunks {
-            XCTAssertLessThanOrEqual(chunk.count, 100)
-            XCTAssertTrue(chunk.hasSuffix("。") || chunk.hasSuffix("！") || chunk.hasSuffix("？"))
+            #expect(chunk.count <= 100)
+            #expect(chunk.hasSuffix("。") || chunk.hasSuffix("！") || chunk.hasSuffix("？"))
         }
-        XCTAssertEqual(chunks.joined(), text)
+        #expect(chunks.joined() == text)
     }
 
-    func testNoSeparatorHardSplit() {
+    @Test func noSeparatorHardSplit() {
         let text = String(repeating: "啊", count: 250)
         let chunks = TranscriptChunker(maxChars: 100).chunk(text)
-        XCTAssertEqual(chunks.count, 3)
+        #expect(chunks.count == 3)
         for chunk in chunks {
-            XCTAssertLessThanOrEqual(chunk.count, 100)
+            #expect(chunk.count <= 100)
         }
-        XCTAssertEqual(chunks.joined(), text)
+        #expect(chunks.joined() == text)
     }
 
-    func testNewlineIsBreak() {
+    @Test func newlineIsBreak() {
         let text = "第一行\n第二行\n第三行"
         let chunks = TranscriptChunker(maxChars: 8).chunk(text)
-        XCTAssertGreaterThan(chunks.count, 1)
-        XCTAssertEqual(chunks.joined(), text)
+        #expect(chunks.count > 1)
+        #expect(chunks.joined() == text)
     }
 }
 ```
@@ -982,7 +1049,10 @@ final class TranscriptChunkerTests: XCTestCase {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `TranscriptChunker`。
 
@@ -1037,7 +1107,10 @@ public struct TranscriptChunker {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: `TranscriptChunkerTests` 全部通过（5 个测试）。
 
@@ -1060,29 +1133,29 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add transcript chunker"
 `FlashNoteCore/Tests/FlashNoteCoreTests/MinutesTemplateTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
-final class MinutesTemplateTests: XCTestCase {
-    func testBuiltinsExist() {
+struct MinutesTemplateTests {
+    @Test func builtinsExist() {
         let builtins = MinutesTemplate.builtins
-        XCTAssertEqual(builtins.count, 3)
+        #expect(builtins.count == 3)
         let names = builtins.map(\.name)
-        XCTAssertTrue(names.contains("工作纪要"))
-        XCTAssertTrue(names.contains("会议纪要"))
-        XCTAssertTrue(names.contains("课程纪要"))
+        #expect(names.contains("工作纪要"))
+        #expect(names.contains("会议纪要"))
+        #expect(names.contains("课程纪要"))
     }
 
-    func testBuiltinsHaveSectionsAndPrompts() {
+    @Test func builtinsHaveSectionsAndPrompts() {
         for template in MinutesTemplate.builtins {
-            XCTAssertFalse(template.sections.isEmpty, "\(template.name) 缺少分节")
-            XCTAssertFalse(template.systemPrompt.isEmpty)
-            XCTAssertTrue(template.userPromptTemplate.contains("{transcript}"))
-            XCTAssertTrue(template.isBuiltin)
+            #expect(!template.sections.isEmpty, "\(template.name) 缺少分节")
+            #expect(!template.systemPrompt.isEmpty)
+            #expect(template.userPromptTemplate.contains("{transcript}"))
+            #expect(template.isBuiltin)
         }
     }
 
-    func testCustomTemplateCodable() throws {
+    @Test func customTemplateCodable() throws {
         let template = MinutesTemplate(
             id: "custom-1",
             name: "面试纪要",
@@ -1093,7 +1166,7 @@ final class MinutesTemplateTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(template)
         let decoded = try JSONDecoder().decode(MinutesTemplate.self, from: data)
-        XCTAssertEqual(decoded, template)
+        #expect(decoded == template)
     }
 }
 ```
@@ -1101,7 +1174,10 @@ final class MinutesTemplateTests: XCTestCase {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `MinutesTemplate`。
 
@@ -1173,7 +1249,10 @@ public struct MinutesTemplate: Codable, Identifiable, Equatable, Sendable {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: `MinutesTemplateTests` 全部通过（3 个测试）。
 
@@ -1196,7 +1275,7 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add minutes templates (bu
 `FlashNoteCore/Tests/FlashNoteCoreTests/MinutesGeneratorTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
 /// 测试替身：按预设响应回复 complete；记录调用。
@@ -1218,15 +1297,15 @@ final class MockLLMClient: LLMClient {
     }
 }
 
-final class MinutesGeneratorTests: XCTestCase {
+struct MinutesGeneratorTests {
     private let recordingID = UUID()
 
-    func testShortTranscriptSingleCallAndSections() async throws {
+    @Test func shortTranscriptSingleCallAndSections() async throws {
         let client = MockLLMClient()
         client.onComplete = { messages in
-            XCTAssertEqual(messages.count, 2) // system + user
-            XCTAssertEqual(messages[0].role, .system)
-            XCTAssertTrue(messages[1].content.contains("转写内容"))
+            #expect(messages.count == 2) // system + user
+            #expect(messages[0].role == .system)
+            #expect(messages[1].content.contains("转写内容"))
             return """
             ## 结论
             通过可插拔转写架构。
@@ -1244,18 +1323,18 @@ final class MinutesGeneratorTests: XCTestCase {
             template: .builtins[0],
             recordingID: recordingID
         )
-        XCTAssertEqual(client.calls.count, 1)
-        XCTAssertEqual(minutes.recordingID, recordingID)
-        XCTAssertEqual(minutes.templateID, "builtin.work")
-        XCTAssertEqual(minutes.styleName, "工作纪要")
-        XCTAssertEqual(minutes.model, "mock-model")
-        XCTAssertEqual(minutes.sections.count, 3)
-        XCTAssertEqual(minutes.sections[0].title, "结论")
-        XCTAssertTrue(minutes.sections[0].body.contains("可插拔"))
-        XCTAssertEqual(minutes.sections[1].title, "行动项")
+        #expect(client.calls.count == 1)
+        #expect(minutes.recordingID == recordingID)
+        #expect(minutes.templateID == "builtin.work")
+        #expect(minutes.styleName == "工作纪要")
+        #expect(minutes.model == "mock-model")
+        #expect(minutes.sections.count == 3)
+        #expect(minutes.sections[0].title == "结论")
+        #expect(minutes.sections[0].body.contains("可插拔"))
+        #expect(minutes.sections[1].title == "行动项")
     }
 
-    func testLongTranscriptChunkedBeforeFinalCall() async throws {
+    @Test func longTranscriptChunkedBeforeFinalCall() async throws {
         let client = MockLLMClient()
         client.onComplete = { messages in
             // 第一轮：片段摘要调用，system 为摘要指令
@@ -1284,11 +1363,11 @@ final class MinutesGeneratorTests: XCTestCase {
             recordingID: recordingID
         )
         // 分段调用 + 最终生成调用
-        XCTAssertGreaterThan(client.calls.count, 1)
-        XCTAssertEqual(minutes.sections.count, 3)
+        #expect(client.calls.count > 1)
+        #expect(minutes.sections.count == 3)
     }
 
-    func testMissingSectionFilledEmpty() async throws {
+    @Test func missingSectionFilledEmpty() async throws {
         let client = MockLLMClient()
         client.onComplete = { _ in "## 结论\n只有结论。" }
         let generator = MinutesGenerator(client: client)
@@ -1297,14 +1376,14 @@ final class MinutesGeneratorTests: XCTestCase {
             template: .builtins[0],
             recordingID: recordingID
         )
-        XCTAssertEqual(minutes.sections.count, 3)
-        XCTAssertEqual(minutes.sections[0].title, "结论")
-        XCTAssertFalse(minutes.sections[0].body.isEmpty)
-        XCTAssertEqual(minutes.sections[1].body, "")
-        XCTAssertEqual(minutes.sections[2].body, "")
+        #expect(minutes.sections.count == 3)
+        #expect(minutes.sections[0].title == "结论")
+        #expect(!minutes.sections[0].body.isEmpty)
+        #expect(minutes.sections[1].body == "")
+        #expect(minutes.sections[2].body == "")
     }
 
-    func testMinutesCodable() throws {
+    @Test func minutesCodable() throws {
         let minutes = Minutes(
             id: UUID(),
             recordingID: recordingID,
@@ -1317,7 +1396,7 @@ final class MinutesGeneratorTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(minutes)
         let decoded = try JSONDecoder().decode(Minutes.self, from: data)
-        XCTAssertEqual(decoded, minutes)
+        #expect(decoded == minutes)
     }
 }
 ```
@@ -1325,7 +1404,10 @@ final class MinutesGeneratorTests: XCTestCase {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `Minutes` / `MinutesSection` / `MinutesGenerator`。
 
@@ -1476,7 +1558,10 @@ public struct MinutesGenerator {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: `MinutesGeneratorTests` 全部通过（4 个测试）。
 
@@ -1500,55 +1585,53 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add minutes generator wit
 `FlashNoteCore/Tests/FlashNoteCoreTests/FileRecordingStoreTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
-final class FileRecordingStoreTests: XCTestCase {
-    private var root: URL!
-    private var store: FileRecordingStore!
+final class FileRecordingStoreTests {
+    private let root: URL
+    private let store: FileRecordingStore
 
-    override func setUp() {
-        super.setUp()
+    init() throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("FlashNoteTests-\(UUID().uuidString)")
-        store = try! FileRecordingStore(root: root)
+        store = try FileRecordingStore(root: root)
     }
 
-    override func tearDown() {
+    deinit {
         try? FileManager.default.removeItem(at: root)
-        super.tearDown()
     }
 
-    func testRecordingCRUD() throws {
+    @Test func recordingCRUD() throws {
         let rec = Recording(title: "周会纪要")
         try store.upsertRecording(rec)
-        XCTAssertEqual(try store.fetchRecordings(), [rec])
-        XCTAssertEqual(try store.fetchRecording(id: rec.id), rec)
+        #expect(try store.fetchRecordings() == [rec])
+        #expect(try store.fetchRecording(id: rec.id) == rec)
 
         var updated = rec
         updated.markTranscribed()
         try store.upsertRecording(updated)
-        XCTAssertEqual(try store.fetchRecording(id: rec.id)?.status, .transcribed)
+        #expect(try store.fetchRecording(id: rec.id)?.status == .transcribed)
 
         try store.deleteRecording(id: rec.id)
-        XCTAssertNil(try store.fetchRecording(id: rec.id))
-        XCTAssertEqual(try store.fetchRecordings(), [])
+        #expect(try store.fetchRecording(id: rec.id) == nil)
+        #expect(try store.fetchRecordings() == [])
     }
 
-    func testStorePersistsAcrossInstances() throws {
+    @Test func storePersistsAcrossInstances() throws {
         let rec = Recording(title: "持久化")
         try store.upsertRecording(rec)
         let second = try FileRecordingStore(root: root)
-        XCTAssertEqual(try second.fetchRecordings(), [rec])
+        #expect(try second.fetchRecordings() == [rec])
     }
 
-    func testTranscriptAndMinutesRoundTrip() throws {
+    @Test func transcriptAndMinutesRoundTrip() throws {
         let rec = Recording(title: "x")
         try store.upsertRecording(rec)
         var transcript = Transcript(recordingID: rec.id)
         transcript.append(TranscriptSegment(startTime: 0, text: "第一句。"))
         try store.upsertTranscript(transcript)
-        XCTAssertEqual(try store.fetchTranscript(recordingID: rec.id), transcript)
+        #expect(try store.fetchTranscript(recordingID: rec.id) == transcript)
 
         let minutes = Minutes(
             recordingID: rec.id,
@@ -1558,26 +1641,29 @@ final class FileRecordingStoreTests: XCTestCase {
             model: "mock"
         )
         try store.upsertMinutes(minutes)
-        XCTAssertEqual(try store.fetchMinutes(recordingID: rec.id), minutes)
+        #expect(try store.fetchMinutes(recordingID: rec.id) == minutes)
     }
 
-    func testFolderCRUD() throws {
+    @Test func folderCRUD() throws {
         let folder = Folder(name: "工作")
         try store.upsertFolder(folder)
-        XCTAssertEqual(try store.fetchFolders(), [folder])
+        #expect(try store.fetchFolders() == [folder])
     }
 
-    func testCorruptedFileThrows() throws {
+    @Test func corruptedFileThrows() throws {
         let rec = Recording(title: "x")
         try store.upsertRecording(rec)
         try "not json".write(to: root.appendingPathComponent("recording-\(rec.id.uuidString).json"), atomically: true, encoding: .utf8)
-        XCTAssertThrowsError(try store.fetchRecording(id: rec.id)) { error in
-            XCTAssertEqual(error as? StoreError, .corrupted("recording"))
+        do {
+            _ = try store.fetchRecording(id: rec.id)
+            Issue.record("应当抛出错误")
+        } catch {
+            #expect(error as? StoreError == .corrupted("recording"))
         }
     }
 
-    func testMissingRecordingReturnsNil() throws {
-        XCTAssertNil(try store.fetchRecording(id: UUID()))
+    @Test func missingRecordingReturnsNil() throws {
+        #expect(try store.fetchRecording(id: UUID()) == nil)
     }
 }
 ```
@@ -1585,7 +1671,10 @@ final class FileRecordingStoreTests: XCTestCase {
 - [ ] **Step 2: 运行确认失败**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译失败——找不到 `RecordingStore` / `FileRecordingStore` / `StoreError`。
 
@@ -1739,7 +1828,10 @@ public final class FileRecordingStore: RecordingStore, @unchecked Sendable {
 - [ ] **Step 4: 运行确认通过**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: `FileRecordingStoreTests` 全部通过（6 个测试）。
 
@@ -1762,18 +1854,18 @@ cd .. && git add FlashNoteCore && git commit -m "feat: add file-based recording 
 `FlashNoteCore/Tests/FlashNoteCoreTests/IntegrationTests.swift`:
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
-final class IntegrationTests: XCTestCase {
-    func testFullPipeline() async throws {
+struct IntegrationTests {
+    @Test func fullPipeline() async throws {
         // 1) 录音 → 转写服务（Mock 引擎）
         let recordingID = UUID()
         let engine = MockTranscriptionEngine()
         let service = TranscriptionService(recordingID: recordingID, engine: engine)
         try service.begin()
         let transcript = service.finish()
-        XCTAssertFalse(transcript.fullText.isEmpty)
+        #expect(!transcript.fullText.isEmpty)
 
         // 2) 纪要生成（Mock LLM）
         let client = MockLLMClient()
@@ -1794,7 +1886,7 @@ final class IntegrationTests: XCTestCase {
             template: .builtins[0],
             recordingID: recordingID
         )
-        XCTAssertEqual(minutes.sections.count, 3)
+        #expect(minutes.sections.count == 3)
 
         // 3) 存储往返
         let root = FileManager.default.temporaryDirectory
@@ -1811,9 +1903,9 @@ final class IntegrationTests: XCTestCase {
         let loadedRec = try store.fetchRecording(id: recordingID)
         let loadedTranscript = try store.fetchTranscript(recordingID: recordingID)
         let loadedMinutes = try store.fetchMinutes(recordingID: recordingID)
-        XCTAssertEqual(loadedRec, rec)
-        XCTAssertEqual(loadedTranscript, transcript)
-        XCTAssertEqual(loadedMinutes, minutes)
+        #expect(loadedRec == rec)
+        #expect(loadedTranscript == transcript)
+        #expect(loadedMinutes == minutes)
     }
 }
 ```
@@ -1823,7 +1915,10 @@ final class IntegrationTests: XCTestCase {
 - [ ] **Step 2: 运行确认**
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 编译成功且全部测试通过。`MockTranscriptionEngine` 与 `MockLLMClient` 与 `IntegrationTests` 同属 `FlashNoteCoreTests` 测试 target，模块内互相可见，可直接复用。
 
@@ -1832,7 +1927,7 @@ Expected: 编译成功且全部测试通过。`MockTranscriptionEngine` 与 `Moc
 若 Step 2 编译失败提示找不到 `MockTranscriptionEngine` 或 `MockLLMClient`，把两个 Mock 类定义移到 `IntegrationTests.swift` 顶部，并删除 `TranscriptionServiceTests.swift` 与 `MinutesGeneratorTests.swift` 中的重复定义：
 
 ```swift
-import XCTest
+import Testing
 @testable import FlashNoteCore
 
 final class MockTranscriptionEngine: TranscriptionEngine {
@@ -1866,7 +1961,7 @@ final class MockLLMClient: LLMClient {
     }
 }
 
-final class IntegrationTests: XCTestCase {
+struct IntegrationTests {
     // ...（Task 11 Step 1 的测试体）
 }
 ```
@@ -1874,7 +1969,10 @@ final class IntegrationTests: XCTestCase {
 然后删除 `TranscriptionServiceTests.swift` 与 `MinutesGeneratorTests.swift` 中重复的 Mock 定义。
 
 ```bash
-cd FlashNoteCore && swift test
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 Expected: 全部测试通过（含集成测试）。
 
@@ -1899,7 +1997,10 @@ FlashNote 的核心领域层（纯 Swift，无平台依赖）。
 ```bash
 cd FlashNoteCore
 swift build
-swift test
+swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
 
 ## 接入说明
@@ -1913,7 +2014,10 @@ App 层需提供：
 - [ ] **Step 5: 全量测试 + 提交**
 
 ```bash
-cd FlashNoteCore && swift test && cd ..
+cd FlashNoteCore && swift test \
+  -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib && cd ..
 git add FlashNoteCore && git commit -m "feat: end-to-end integration test and README"
 ```
 
@@ -1939,4 +2043,5 @@ Expected: 全量测试通过，提交成功。
 **4. 已知取舍：**
 - `FileRecordingStore.deleteRecording` 对不存在文件抛错（测试未覆盖该路径，符合当前需求）。
 - `fetchRecordings` 依赖 `contentsOfDirectory`，子目录中其他文件被忽略（前缀过滤）。
-- 工具链为 Swift 6.3 + tools-version 5.10（Swift 5 语言模式），避免严格并发对 URLProtocol 桩的影响。
+- 测试使用 Swift Testing 而非 XCTest：CLT-only 机器（无 Xcode）的 macOS SDK 不含 XCTest.framework，Swift Testing 随 Swift 工具链一起提供。
+- 本机 `swift test` 需携带文档中的框架路径与 rpath 标志（`-F/path` 必须使用紧贴形式）；装有 Xcode 的机器上直接运行 `swift test` 即可，无需标志。
