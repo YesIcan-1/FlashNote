@@ -41,4 +41,27 @@ struct TranscriptChunkerTests {
         #expect(chunks.count > 1)
         #expect(chunks.joined() == text)
     }
+
+    @Test func midTextOversizedSentenceHardSplit() {
+        // 句中超长句子（无标点）必须被硬切，块数 = 3、每块 ≤ maxChars
+        let text = "短句。" + String(repeating: "长", count: 150) + "。" + "尾句。"
+        let chunks = TranscriptChunker(maxChars: 100).chunk(text)
+        #expect(chunks.count == 3)
+        for chunk in chunks {
+            #expect(chunk.count <= 100)
+        }
+        #expect(chunks.joined() == text)
+    }
+
+    @Test func exactMaxCharsBoundary() {
+        // 恰好 maxChars 字符（末位为句号）→ 单个块
+        let text = String(repeating: "字", count: 99) + "。"
+        let chunks = TranscriptChunker(maxChars: 100).chunk(text)
+        #expect(chunks == [text])
+    }
+
+    @Test func leadingBreakAndConsecutiveBreaks() {
+        #expect(TranscriptChunker().chunk("。开头") == ["。开头"])
+        #expect(TranscriptChunker().chunk("。。。") == ["。。。"])
+    }
 }
