@@ -1554,6 +1554,26 @@ struct MinutesGeneratorTests {
         let decoded = try JSONDecoder().decode(Minutes.self, from: data)
         #expect(decoded == minutes)
     }
+
+    @Test func parseSectionsToleratesHeaderVariants() {
+        let output = """
+        开头前言（应被丢弃）。
+
+        ##结论
+        结论正文。
+
+        ### 行动项
+        行动项正文。
+
+        ## 待跟进：
+        待跟进正文。
+        """
+        let sections = MinutesGenerator.parseSections(output, expected: ["结论", "行动项", "待跟进"])
+        #expect(sections.count == 3)
+        #expect(sections[0].body.contains("结论正文"))
+        #expect(sections[1].body.contains("行动项正文"))
+        #expect(sections[2].body.contains("待跟进正文"))
+    }
 }
 ```
 
@@ -1682,7 +1702,7 @@ public struct MinutesGenerator {
         return prompt
     }
 
-    /// 解析 LLM 输出的 Markdown，按 "## 标题" 提取各节；缺失的节补空。
+    /// 解析 LLM 输出的 Markdown，按 "## 标题"（容忍 "##标题"/"### 标题"/"## 标题：" 变体）提取各节；缺失的节补空。
     static func parseSections(_ output: String, expected: [String]) -> [MinutesSection] {
         var found: [MinutesSection] = []
         var currentTitle: String?
@@ -1700,9 +1720,9 @@ public struct MinutesGenerator {
 
         for line in output.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("## ") {
+            if let title = Self.headerTitle(from: trimmed) {
                 flush()
-                currentTitle = String(trimmed.dropFirst(3))
+                currentTitle = title
             } else if currentTitle != nil {
                 currentBody.append(line)
             }
@@ -1715,6 +1735,18 @@ public struct MinutesGenerator {
         }
         return expected.map { MinutesSection(title: $0, body: byTitle[$0] ?? "") }
     }
+
+    /// 把 Markdown 标题行规范化为小节标题：容忍 "##标题"、"### 标题"、尾部冒号（：/:）；非标题行返回 nil。
+    static func headerTitle(from line: String) -> String? {
+        guard line.hasPrefix("#") else { return nil }
+        var rest = line
+        while rest.hasPrefix("#") { rest.removeFirst() }
+        let title = rest.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return nil }
+        let normalized = title.trimmingCharacters(in: CharacterSet(charactersIn: "：:"))
+        guard !normalized.isEmpty else { return nil }
+        return normalized
+    }
 }
 ```
 
@@ -1726,7 +1758,7 @@ cd FlashNoteCore && swift test \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
-Expected: `MinutesGeneratorTests` 全部通过（5 个测试）。
+Expected: `MinutesGeneratorTests` 全部通过（6 个测试）。
 
 - [ ] **Step 5: 提交**
 
@@ -1804,7 +1836,35 @@ final class FileRecordingStoreTests {
             model: "mock"
         )
         try store.upsertMinutes(minutes)
-        #expect(try store.fetchMinutes(recordingID: rec.id) == minutes)
+        #expect(try store.fetchMinutes(recordingID: rec.id) == [minutes])
+    }
+
+    @Test func minutesHistoryPreserved() throws {
+        // 规格 §5.4：切换风格重新生成时保留旧纪要（可回溯）——按 minutes.id 键控，同录音多份纪要并存
+        let rec = Recording(title: "x")
+        try store.upsertRecording(rec)
+        let first = Minutes(
+            recordingID: rec.id,
+            templateID: "builtin.work",
+            styleName: "工作纪要",
+            sections: [MinutesSection(title: "结论", body: "第一版。")],
+            model: "mock",
+            generatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let second = Minutes(
+            recordingID: rec.id,
+            templateID: "builtin.meeting",
+            styleName: "会议纪要",
+            sections: [MinutesSection(title: "议题", body: "第二版。")],
+            model: "mock",
+            generatedAt: Date(timeIntervalSince1970: 200)
+        )
+        try store.upsertMinutes(first)
+        try store.upsertMinutes(second)
+        let fetched = try store.fetchMinutes(recordingID: rec.id)
+        #expect(fetched.count == 2)
+        #expect(fetched.contains(first))
+        #expect(fetched.contains(second))
     }
 
     @Test func folderCRUD() throws {
@@ -1862,7 +1922,8 @@ public protocol RecordingStore: AnyObject, Sendable {
     func fetchTranscript(recordingID: UUID) throws -> Transcript?
     func upsertTranscript(_ transcript: Transcript) throws
 
-    func fetchMinutes(recordingID: UUID) throws -> Minutes?
+    /// 录音的全部纪要（含历史版本，按生成时间升序；规格 §5.4 保留旧纪要）。
+    func fetchMinutes(recordingID: UUID) throws -> [Minutes]
     func upsertMinutes(_ minutes: Minutes) throws
 
     func fetchFolders() throws -> [Folder]
@@ -1955,14 +2016,29 @@ public final class FileRecordingStore: RecordingStore, @unchecked Sendable {
         try save(transcript, kind: "transcript", id: transcript.recordingID)
     }
 
-    public func fetchMinutes(recordingID: UUID) throws -> Minutes? {
+    /// 录音的全部纪要（含历史版本，按生成时间升序）。文件按 minutes.id 键控，
+    /// 同录音多份纪要并存（规格 §5.4 风格切换保留旧纪要）。
+    public func fetchMinutes(recordingID: UUID) throws -> [Minutes] {
         lock.lock(); defer { lock.unlock() }
-        return try load(Minutes.self, kind: "minutes", id: recordingID)
+        let files = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        var result: [Minutes] = []
+        for file in files where file.lastPathComponent.hasPrefix("minutes-") {
+            do {
+                let data = try Data(contentsOf: file)
+                let minutes = try decoder.decode(Minutes.self, from: data)
+                if minutes.recordingID == recordingID {
+                    result.append(minutes)
+                }
+            } catch {
+                throw StoreError.corrupted("minutes")
+            }
+        }
+        return result.sorted { $0.generatedAt < $1.generatedAt }
     }
 
     public func upsertMinutes(_ minutes: Minutes) throws {
         lock.lock(); defer { lock.unlock() }
-        try save(minutes, kind: "minutes", id: minutes.recordingID)
+        try save(minutes, kind: "minutes", id: minutes.id)
     }
 
     public func fetchFolders() throws -> [Folder] {
@@ -1997,7 +2073,7 @@ cd FlashNoteCore && swift test \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
   -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 ```
-Expected: `FileRecordingStoreTests` 全部通过（6 个测试）。
+Expected: `FileRecordingStoreTests` 全部通过（7 个测试）。
 
 - [ ] **Step 5: 提交**
 
@@ -2069,7 +2145,7 @@ struct IntegrationTests {
         let loadedMinutes = try store.fetchMinutes(recordingID: recordingID)
         #expect(loadedRec == rec)
         #expect(loadedTranscript == transcript)
-        #expect(loadedMinutes == minutes)
+        #expect(loadedMinutes == [minutes])
     }
 }
 ```
