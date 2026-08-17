@@ -66,4 +66,18 @@ struct ModelsTests {
         #expect(t.fullText == "第一句。\n第二句。")
         #expect(t.language == "zh-Hans")
     }
+
+    @Test func folderCodable() throws {
+        let folder = Folder(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+            name: "工作",
+            parentID: nil,
+            colorIndex: 1,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let data = try JSONEncoder().encode(folder)
+        let decoded = try JSONDecoder().decode(Folder.self, from: data)
+        #expect(decoded == folder)
+        #expect(decoded.name == "工作")
+    }
 }
