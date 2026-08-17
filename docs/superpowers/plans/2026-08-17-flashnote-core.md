@@ -1724,13 +1724,12 @@ public final class FileRecordingStore: RecordingStore, @unchecked Sendable {
         self.root = root
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
-        // 用 secondsSince1970（Double，无损）而非 .iso8601：后者按整秒编码会截断亚秒精度，
-        // 导致 Date() 生成的时间戳 encode→decode 后不相等，破坏所有 == 断言（Task 10/11）。
-        encoder.dateEncodingStrategy = .secondsSince1970
+        // 不设置自定义日期策略（保持默认 deferredToDate，参考日期 Double 编码）。
+        // 实测（本机 CLT Foundation）：.iso8601 与 .secondsSince1970/.millisecondsSince1970
+        // 都会损坏亚秒精度，导致 Date() 生成的戳 encode→decode 后不相等；默认策略 0/50000 失败。
         encoder.outputFormatting = [.sortedKeys]
         self.encoder = encoder
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
         self.decoder = decoder
     }
 
