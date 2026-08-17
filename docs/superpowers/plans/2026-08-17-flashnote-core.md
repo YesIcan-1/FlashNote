@@ -188,16 +188,17 @@ struct ModelsTests {
     }
 
     @Test func markTranscribed() {
-        var rec = Recording(title: "x")
+        var rec = Recording(title: "x", createdAt: Date(timeIntervalSince1970: 1000))
         rec.markTranscribed()
         #expect(rec.status == .transcribed)
-        #expect(rec.updatedAt >= rec.createdAt)
+        #expect(rec.updatedAt > rec.createdAt)
     }
 
     @Test func markSummarized() {
-        var rec = Recording(title: "x")
+        var rec = Recording(title: "x", createdAt: Date(timeIntervalSince1970: 1000))
         rec.markSummarized()
         #expect(rec.status == .summarized)
+        #expect(rec.updatedAt > rec.createdAt)
     }
 
     @Test func recordingCodableRoundTrip() throws {
@@ -261,7 +262,7 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
         duration: TimeInterval = 0,
         status: RecordingStatus = .recording,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -270,7 +271,7 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
         self.duration = duration
         self.status = status
         self.createdAt = createdAt
-        self.updatedAt = updatedAt
+        self.updatedAt = updatedAt ?? createdAt
     }
 
     public mutating func markTranscribed() {
@@ -1723,11 +1724,13 @@ public final class FileRecordingStore: RecordingStore, @unchecked Sendable {
         self.root = root
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        // 用 secondsSince1970（Double，无损）而非 .iso8601：后者按整秒编码会截断亚秒精度，
+        // 导致 Date() 生成的时间戳 encode→decode 后不相等，破坏所有 == 断言（Task 10/11）。
+        encoder.dateEncodingStrategy = .secondsSince1970
         encoder.outputFormatting = [.sortedKeys]
         self.encoder = encoder
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .secondsSince1970
         self.decoder = decoder
     }
 
