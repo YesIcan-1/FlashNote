@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AVFoundation
 import FlashNoteCore
 
@@ -42,6 +43,7 @@ final class RecorderViewModel {
     }
 
     func start() throws {
+        recorderLogger.info("start begin")
         guard phase == .idle else { throw TranscriptionError.invalidState("already started") }
 
         let id = UUID()
@@ -58,11 +60,14 @@ final class RecorderViewModel {
         let fileURL = Self.recordingFileURL(for: id)
         do {
             try audio.startRecording(to: fileURL)
+            recorderLogger.info("audio started")
         } catch {
+            recorderLogger.error("audio start failed: \(error)")
             phase = .idle
             throw error
         }
         try service?.begin()
+        recorderLogger.info("service began")
         phase = .recording
         startTimer()
         wireAudio()
@@ -135,5 +140,22 @@ final class RecorderViewModel {
     static func formatElapsed(_ total: TimeInterval) -> String {
         let total = Int(total)
         return String(format: "%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
+    }
+
+    /// 错误 → 用户可读文案（可测）。
+    static func errorText(for error: Error) -> String {
+        if let transcriptionError = error as? TranscriptionError {
+            switch transcriptionError {
+            case .permissionDenied:
+                return "需要麦克风和语音识别权限，请在系统设置中允许后重试"
+            case .engineUnavailable:
+                return "语音识别不可用"
+            case .invalidState(let detail):
+                return "状态错误：\(detail)"
+            case .engineFailed(let detail):
+                return "识别失败：\(detail)"
+            }
+        }
+        return error.localizedDescription
     }
 }

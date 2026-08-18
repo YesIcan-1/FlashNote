@@ -1,36 +1,78 @@
 import SwiftUI
+import os
 import FlashNoteCore
+
+let recorderLogger = Logger(subsystem: "com.flashnote.mac", category: "recorder")
 
 /// 录音界面：REC 指示 + 计时 + 波形 + 实时转写 + 暂停/停止/完成。
 struct RecorderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appEnvironment) private var environment
     @State private var viewModel: RecorderViewModel?
+    @State private var errorMessage: String?
 
     var body: some View {
         Group {
             if let viewModel {
                 content(viewModel)
+            } else if let errorMessage {
+                errorView(errorMessage)
             } else {
                 ProgressView("准备录音…")
             }
         }
         .frame(minWidth: 560, minHeight: 480)
         .task {
-            // 视图层负责授权检查
+            // 视图层负责授权检查（语音识别 → 麦克风）；通过后创建 ViewModel 并立即开始录音
+            recorderLogger.info("task begin")
             if let authError = await SpeechAuthorization.requestPermissions() {
-                // M1：授权失败直接退出；后续里程碑做引导页
-                showAuthError(authError)
+                recorderLogger.error("speech auth failed: \(authError)")
+                errorMessage = RecorderViewModel.errorText(for: authError)
                 return
             }
-            viewModel = makeViewModel()
+            recorderLogger.info("speech authorized")
+            if let micError = await SpeechAuthorization.requestMicrophonePermission() {
+                recorderLogger.error("mic auth failed: \(micError)")
+                errorMessage = RecorderViewModel.errorText(for: micError)
+                return
+            }
+            recorderLogger.info("mic authorized")
+            guard let vm = makeViewModel() else {
+                recorderLogger.error("engine unavailable")
+                errorMessage = "语音识别不可用"
+                return
+            }
+            viewModel = vm
+            do {
+                try vm.start()
+                recorderLogger.info("recording started")
+            } catch {
+                recorderLogger.error("start failed: \(String(describing: error), privacy: .public)")
+                errorMessage = RecorderViewModel.errorText(for: error)
+            }
         }
     }
 
-    private func makeViewModel() -> RecorderViewModel {
-        let env = environment
-        let engine = SpeechEngine() ?? SpeechEngine(locale: Locale(identifier: "en-US"))!
-        return RecorderViewModel(audio: AudioService(), engine: engine, store: env!.store)
+    private func makeViewModel() -> RecorderViewModel? {
+        guard let env = environment else { return nil }
+        let engine = SpeechEngine() ?? SpeechEngine(locale: Locale(identifier: "en-US"))
+        guard let engine else { return nil }
+        return RecorderViewModel(audio: AudioService(), engine: engine, store: env.store)
+    }
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(AppTheme.secondaryText)
+            Text(message)
+                .foregroundStyle(AppTheme.primaryText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 30)
+            Button("关闭") { dismiss() }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(24)
     }
 
     private func content(_ vm: RecorderViewModel) -> some View {
@@ -82,10 +124,6 @@ struct RecorderView: View {
             }
         }
         .padding(.top, 4)
-    }
-
-    private func showAuthError(_ error: TranscriptionError) {
-        dismiss()
     }
 }
 

@@ -121,4 +121,10 @@ struct RecorderViewModelTests {
         #expect(RecorderViewModel.formatElapsed(3725) == "01:02:05")
         #expect(RecorderViewModel.formatElapsed(59) == "00:00:59")
     }
+
+    @Test func errorTextMapping() {
+        #expect(RecorderViewModel.errorText(for: TranscriptionError.permissionDenied).contains("权限"))
+        #expect(RecorderViewModel.errorText(for: TranscriptionError.engineUnavailable).contains("不可用"))
+        #expect(RecorderViewModel.errorText(for: TranscriptionError.engineFailed("boom")).contains("boom"))
+    }
 }

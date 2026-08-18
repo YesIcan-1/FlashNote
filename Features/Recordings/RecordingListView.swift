@@ -5,9 +5,13 @@ import FlashNoteCore
 /// 注意：核心包 Recording 不可哈希，iOS 导航用 UUID 值路由。
 struct RecordingListView: View {
     @Environment(\.appEnvironment) private var environment
+    @Binding var selectedID: UUID?
     @State private var recordings: [Recording] = []
     @State private var showingRecorder = false
-    @State private var selectedID: UUID?
+
+    init(selectedID: Binding<UUID?>) {
+        self._selectedID = selectedID
+    }
 
     var body: some View {
         Group {

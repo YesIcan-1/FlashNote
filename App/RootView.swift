@@ -5,23 +5,31 @@ struct RootView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var recordings: [Recording] = []
     @State private var selection: UUID?
-    @State private var showingRecorder = false
 
     var body: some View {
 #if os(macOS)
         NavigationSplitView {
-            List {
+            List(selection: $selection) {
                 Label("所有录音", systemImage: AppIcons.mic)
                     .fontWeight(.semibold)
-                    .foregroundStyle(AppTheme.accent)
+                    .tag(UUID?.none)
                 Label("工作", systemImage: AppIcons.folder)
+                    .foregroundStyle(.secondary)
+                    .disabled(true)
                 Label("课程", systemImage: AppIcons.book)
+                    .foregroundStyle(.secondary)
+                    .disabled(true)
                 Label("会议", systemImage: AppIcons.chat)
+                    .foregroundStyle(.secondary)
+                    .disabled(true)
+                Text("文件夹筛选将在 M4 提供")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.secondaryText)
             }
             .navigationTitle("FlashNote")
             .listStyle(.sidebar)
         } content: {
-            RecordingListView()
+            RecordingListView(selectedID: $selection)
         } detail: {
             if let selection,
                let recording = recordings.first(where: { $0.id == selection }) {
@@ -36,7 +44,7 @@ struct RootView: View {
 #else
         TabView {
             NavigationStack {
-                RecordingListView()
+                RecordingListView(selectedID: $selection)
                     .navigationDestination(for: UUID.self) { id in
                         if let recording = recordings.first(where: { $0.id == id }) {
                             RecordingDetailView(recording: recording)

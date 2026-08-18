@@ -96,9 +96,7 @@ targets:
         PRODUCT_NAME: FlashNoteMac
         PRODUCT_MODULE_NAME: FlashNoteMac
         ENABLE_TESTABILITY: YES
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: 用于录制音频并实时转写
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: 用于实时语音转写
+        INFOPLIST_FILE: Resources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
     scheme:
