@@ -135,4 +135,25 @@ struct TranscriptionServiceTests {
         #expect(throws: TranscriptionError.self) { try service.begin() }
         #expect(service.lastError as? TranscriptionError == .engineUnavailable)
     }
+
+    @Test func onNewSegmentFiresForFinalOnly() throws {
+        final class MixedEngine: TranscriptionEngine {
+            let displayName = "Mixed"
+            let isRealtime = true
+            var onSegment: ((TranscriptSegment) -> Void)?
+            var onError: ((Error) -> Void)?
+            func start() throws {
+                onSegment?(TranscriptSegment(startTime: 0, text: "临时", isFinal: false))
+                onSegment?(TranscriptSegment(startTime: 0, text: "定稿。", isFinal: true))
+                onSegment?(TranscriptSegment(startTime: 2, text: "还在想…", isFinal: false))
+            }
+            func cancel() {}
+        }
+        let service = TranscriptionService(recordingID: UUID(), engine: MixedEngine())
+        var notified: [String] = []
+        service.onNewSegment = { notified.append($0.text) }
+        try service.begin()
+        #expect(notified == ["定稿。"])
+        #expect(service.transcript.fullText == "定稿。")
+    }
 }

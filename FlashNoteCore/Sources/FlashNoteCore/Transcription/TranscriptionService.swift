@@ -17,6 +17,10 @@ public final class TranscriptionService {
     private let engine: TranscriptionEngine
     private let lock = NSLock()
 
+    /// 每追加一个最终段落时回调（在锁内触发，调用方勿在回调中调用本服务方法以免死锁）。
+    /// App 层用它做实时 UI 更新（如"最新一段高亮"）。
+    public var onNewSegment: ((TranscriptSegment) -> Void)?
+
     public init(recordingID: UUID, engine: TranscriptionEngine, language: String = "zh-Hans") {
         self._transcript = Transcript(recordingID: recordingID, language: language)
         self.engine = engine
@@ -24,7 +28,9 @@ public final class TranscriptionService {
             guard let self, segment.isFinal else { return }
             self.lock.lock()
             self._transcript.append(segment)
+            let onNew = self.onNewSegment
             self.lock.unlock()
+            onNew?(segment)
         }
         engine.onError = { [weak self] error in
             self?.setLastError(error)

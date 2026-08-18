@@ -12,6 +12,36 @@
 
 **模拟器无麦克风**：iOS 目标的单测与构建在模拟器完成；**实时录音+转写的真机验证在 macOS target 上进行**（本机有麦克风与 Speech 框架）。
 
+## 环境实测修正（执行期间发现，后续任务必须遵守）
+
+1. **构建命令**：本机（Apple Silicon）所有 `xcodebuild` 必须加 `ONLY_ACTIVE_ARCH=YES ARCHS=arm64`。默认通用架构构建会让本地框架/包产物只构建单一架构，导致另一端架构链接报 "built for incompatible target"。
+2. **FlashNoteCore 集成方式**：XcodeGen 2.46 的本地 Swift Package 引用在 Xcode 26.6 下多平台产物路径解析错误（iOS target 链接到 macOS 产物目录）。**改用两个 framework target**（`FlashNoteCore` iOS 变体 + `FlashNoteCoreMac` macOS 变体，模块名均为 FlashNoteCore），App/测试 target 依赖对应变体。包本体保留给 CLI 测试（`cd FlashNoteCore && swift test`）。
+3. **测试 target 配置**：需 `GENERATE_INFOPLIST_FILE: YES`、`TEST_HOST` + `BUNDLE_LOADER`（指向宿主 App）、App target 需 `ENABLE_TESTABILITY: YES`（否则 `@testable import` 报 "unable to resolve Swift module dependency"）。
+4. **测试文件的模块导入**：共享 `Tests/` 同时被双平台测试 target 编译，必须用条件导入：
+   ```swift
+   #if os(macOS)
+   @testable import FlashNoteMac
+   #else
+   @testable import FlashNote
+   #endif
+   ```
+5. **iOS 模拟器目的地不可用**：本机 `xcodebuild` 无法发现模拟器目的地（simctl 可见、SDK 可见，但 destination 列表只有 macOS）。iOS 构建验证改用 `-sdk iphoneos CODE_SIGNING_ALLOWED=NO`（真实 iOS SDK 编译，免签名）；iOS 测试执行待用户运行 `sudo xcodebuild -runFirstLaunch` 修复模拟器注册后补充。共享逻辑测试已在 macOS 测试 target 覆盖。
+6. **macOS 测试命令**（本计划内统一）：
+   ```bash
+   xcodebuild -project FlashNote.xcodeproj -scheme FlashNoteMac -destination 'platform=macOS' ONLY_ACTIVE_ARCH=YES ARCHS=arm64 test
+   ```
+   **iOS 构建命令**（统一）：
+   ```bash
+   xcodebuild -project FlashNote.xcodeproj -scheme FlashNote -sdk iphoneos CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64 build
+   ```
+7. **框架必须是静态的（`MACH_O_TYPE: staticlib`）**：动态框架的默认安装路径指向 `/Library/Frameworks`，App 启动时 dyld 找不到 → 崩溃。静态框架链接进 App 二进制，无运行时嵌入问题。
+8. **录音链路调试结论（全部已修复，务必遵守）**：
+   - **TCC 责任归属**：从终端（Tabby 等）直接执行二进制启动的 App，TCC 把"责任进程"算到终端应用，检查的是终端 App 的 Info.plist（无权限键）→ `__TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__` 崩溃。**必须用 `open` 启动**，让 App 成为自身责任进程。
+   - **Info.plist 权限键**：`GENERATE_INFOPLIST_FILE` + `INFOPLIST_KEY_*` 生成的 plist，TCC 读不到权限键（plutil/defaults 能读但 tccd 判定缺失）→ 改用**物理 `Resources/Info.plist`**（macOS target 用 `INFOPLIST_FILE`）。
+   - **麦克风授权独立**：`SFSpeechRecognizer.requestAuthorization` 只覆盖语音识别；麦克风需单独 `AVCaptureDevice.requestAccess(for: .audio)`，二者都要请求后再启动录音。
+   - **音频格式/挂起**：`engine.inputNode.outputFormat(forBus:)` 在引擎运行前可能为 0 声道（导致 AVAudioFile 写文件失败）；显式 `engine.prepare()` 会在后台线程挂起。正确做法：用 `inputNode.inputFormat(forBus:)`（硬件输入格式），失败回退 `AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)`，**不调用 `prepare()`**，且写文件前先创建音频目录。
+9. 已确认可用的最终 `project.yml` 结构（双 app + 双静态 framework + 双测试 target）见 Task 1 Step 1 的修订版（下文已更新）。
+
 ---
 
 ## 文件结构
@@ -68,7 +98,7 @@
 - Create: `Resources/Assets.xcassets/AppIcon.appiconset/Contents.json`
 - Create: `.gitignore` 追加（`FlashNote.xcodeproj` 由 xcodegen 生成，不入库；见 Step 6）
 
-- [ ] **Step 1: 写 project.yml**
+- [x] **Step 1: 写 project.yml**
 
 ```yaml
 name: FlashNote
@@ -82,6 +112,32 @@ settings:
   base:
     SWIFT_VERSION: "5.10"
 targets:
+  # FlashNoteCore 以 framework target 集成（XcodeGen 本地包引用在 Xcode 26.6 下
+  # 多平台产物路径解析错误）。同一份 Sources 两个平台变体，模块名均为 FlashNoteCore。
+  FlashNoteCore:
+    type: framework
+    platform: iOS
+    sources:
+      - path: FlashNoteCore/Sources
+    settings:
+      base:
+        PRODUCT_NAME: FlashNoteCore
+        PRODUCT_MODULE_NAME: FlashNoteCore
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+        DEFINES_MODULE: YES
+  FlashNoteCoreMac:
+    type: framework
+    platform: macOS
+    sources:
+      - path: FlashNoteCore/Sources
+    settings:
+      base:
+        PRODUCT_NAME: FlashNoteCore
+        PRODUCT_MODULE_NAME: FlashNoteCore
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+        DEFINES_MODULE: YES
   FlashNote:
     type: application
     platform: iOS
@@ -92,10 +148,13 @@ targets:
       - path: DesignSystem
       - path: Resources
     dependencies:
-      - package: FlashNoteCore
+      - target: FlashNoteCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.flashnote.app
+        PRODUCT_NAME: FlashNote
+        PRODUCT_MODULE_NAME: FlashNote
+        ENABLE_TESTABILITY: YES
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 用于录制音频并实时转写
@@ -113,7 +172,14 @@ targets:
       - path: Tests
     dependencies:
       - target: FlashNote
-      - package: FlashNoteCore
+      - target: FlashNoteCore
+    settings:
+      base:
+        PRODUCT_NAME: FlashNoteTests
+        PRODUCT_MODULE_NAME: FlashNoteTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/FlashNote.app/FlashNote"
+        BUNDLE_LOADER: "$(TEST_HOST)"
   FlashNoteMac:
     type: application
     platform: macOS
@@ -124,10 +190,13 @@ targets:
       - path: DesignSystem
       - path: Resources
     dependencies:
-      - package: FlashNoteCore
+      - target: FlashNoteCoreMac
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.flashnote.mac
+        PRODUCT_NAME: FlashNoteMac
+        PRODUCT_MODULE_NAME: FlashNoteMac
+        ENABLE_TESTABILITY: YES
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 用于录制音频并实时转写
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: 用于实时语音转写
@@ -143,10 +212,14 @@ targets:
       - path: Tests
     dependencies:
       - target: FlashNoteMac
-      - package: FlashNoteCore
-packages:
-  FlashNoteCore:
-    path: FlashNoteCore
+      - target: FlashNoteCoreMac
+    settings:
+      base:
+        PRODUCT_NAME: FlashNoteMacTests
+        PRODUCT_MODULE_NAME: FlashNoteMacTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/FlashNoteMac.app/Contents/MacOS/FlashNoteMac"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 ```
 
 - [ ] **Step 2: 写入口与根视图**
