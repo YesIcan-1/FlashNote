@@ -35,7 +35,12 @@
    xcodebuild -project FlashNote.xcodeproj -scheme FlashNote -sdk iphoneos CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64 build
    ```
 7. **框架必须是静态的（`MACH_O_TYPE: staticlib`）**：动态框架的默认安装路径指向 `/Library/Frameworks`，App 启动时 dyld 找不到 → 崩溃。静态框架链接进 App 二进制，无运行时嵌入问题。
-8. 已确认可用的最终 `project.yml` 结构（双 app + 双静态 framework + 双测试 target）见 Task 1 Step 1 的修订版（下文已更新）。
+8. **录音链路调试结论（全部已修复，务必遵守）**：
+   - **TCC 责任归属**：从终端（Tabby 等）直接执行二进制启动的 App，TCC 把"责任进程"算到终端应用，检查的是终端 App 的 Info.plist（无权限键）→ `__TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__` 崩溃。**必须用 `open` 启动**，让 App 成为自身责任进程。
+   - **Info.plist 权限键**：`GENERATE_INFOPLIST_FILE` + `INFOPLIST_KEY_*` 生成的 plist，TCC 读不到权限键（plutil/defaults 能读但 tccd 判定缺失）→ 改用**物理 `Resources/Info.plist`**（macOS target 用 `INFOPLIST_FILE`）。
+   - **麦克风授权独立**：`SFSpeechRecognizer.requestAuthorization` 只覆盖语音识别；麦克风需单独 `AVCaptureDevice.requestAccess(for: .audio)`，二者都要请求后再启动录音。
+   - **音频格式/挂起**：`engine.inputNode.outputFormat(forBus:)` 在引擎运行前可能为 0 声道（导致 AVAudioFile 写文件失败）；显式 `engine.prepare()` 会在后台线程挂起。正确做法：用 `inputNode.inputFormat(forBus:)`（硬件输入格式），失败回退 `AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)`，**不调用 `prepare()`**，且写文件前先创建音频目录。
+9. 已确认可用的最终 `project.yml` 结构（双 app + 双静态 framework + 双测试 target）见 Task 1 Step 1 的修订版（下文已更新）。
 
 ---
 

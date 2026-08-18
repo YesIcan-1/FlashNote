@@ -45,6 +45,6 @@ xcodebuild -project FlashNote.xcodeproj -scheme FlashNote \
 
 ## 手动验证（macOS）
 
-1. `xcodebuild ... build` 后 `open` 生成的 `FlashNoteMac.app`
-2. 首次录音需授权麦克风 + 语音识别；拒绝不崩溃
+1. 构建后用 **`open`** 启动生成的 `FlashNoteMac.app`（不要从终端直接执行二进制——TCC 会把责任算到终端应用导致隐私崩溃）
+2. 点「＋」→ 依次授权「语音识别」与「麦克风」→ 自动开始录音
 3. 录音 → 说话 → 实时转写逐句出现 → 停止 → 列表出现"已转写"录音 → 详情查看全文
