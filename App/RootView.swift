@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var recordings: [Recording] = []
     @State private var selection: UUID?
+    @State private var showingSettings = false
 
     var body: some View {
 #if os(macOS)
@@ -28,6 +29,16 @@ struct RootView: View {
             }
             .navigationTitle("FlashNote")
             .listStyle(.sidebar)
+            .toolbar {
+                ToolbarItem {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: AppIcons.settings)
+                    }
+                    .help("设置")
+                }
+            }
         } content: {
             RecordingListView(selectedID: $selection)
         } detail: {
@@ -41,6 +52,9 @@ struct RootView: View {
         }
         .frame(minWidth: 1000, minHeight: 620)
         .onChange(of: selection) { _, _ in reloadRecordings() }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
 #else
         TabView {
             NavigationStack {
@@ -54,7 +68,7 @@ struct RootView: View {
             .tabItem { Label("录音", systemImage: AppIcons.mic) }
             ContentUnavailableView("文件夹将在 M4 实现", systemImage: AppIcons.folder)
                 .tabItem { Label("文件夹", systemImage: AppIcons.folder) }
-            ContentUnavailableView("设置将在 M3 实现", systemImage: AppIcons.settings)
+            SettingsView()
                 .tabItem { Label("设置", systemImage: AppIcons.settings) }
         }
 #endif
