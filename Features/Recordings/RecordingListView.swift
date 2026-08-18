@@ -8,6 +8,7 @@ struct RecordingListView: View {
     @Binding var selectedID: UUID?
     @State private var recordings: [Recording] = []
     @State private var showingRecorder = false
+    @State private var showingImport = false
 
     init(selectedID: Binding<UUID?>) {
         self._selectedID = selectedID
@@ -17,7 +18,7 @@ struct RecordingListView: View {
         Group {
             if recordings.isEmpty {
                 ContentUnavailableView("还没有录音", systemImage: AppIcons.mic,
-                                       description: Text("点击 + 开始第一次录音"))
+                                       description: Text("点击 + 录音，或导入音频文件"))
             } else {
                 List(selection: $selectedID) {
                     ForEach(recordings) { recording in
@@ -35,19 +36,32 @@ struct RecordingListView: View {
         }
         .navigationTitle("录音")
         .toolbar {
-            ToolbarItem {
+            ToolbarItemGroup {
+                Button {
+                    showingImport = true
+                } label: {
+                    Image(systemName: AppIcons.importFile)
+                }
+                .help("导入音频")
                 Button {
                     showingRecorder = true
                 } label: {
                     Image(systemName: AppIcons.plus)
                 }
+                .help("新建录音")
             }
         }
         .sheet(isPresented: $showingRecorder) {
             RecorderView()
         }
+        .sheet(isPresented: $showingImport) {
+            ImportAudioView()
+        }
         .onAppear { reload() }
         .onChange(of: showingRecorder) { _, isShown in
+            if !isShown { reload() }
+        }
+        .onChange(of: showingImport) { _, isShown in
             if !isShown { reload() }
         }
     }
