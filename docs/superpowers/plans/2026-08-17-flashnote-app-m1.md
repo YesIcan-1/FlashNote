@@ -34,7 +34,8 @@
    ```bash
    xcodebuild -project FlashNote.xcodeproj -scheme FlashNote -sdk iphoneos CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64 build
    ```
-7. 已确认可用的最终 `project.yml` 结构（双 app + 双 framework + 双测试 target）见 Task 1 Step 1 的修订版（下文已更新）。
+7. **框架必须是静态的（`MACH_O_TYPE: staticlib`）**：动态框架的默认安装路径指向 `/Library/Frameworks`，App 启动时 dyld 找不到 → 崩溃。静态框架链接进 App 二进制，无运行时嵌入问题。
+8. 已确认可用的最终 `project.yml` 结构（双 app + 双静态 framework + 双测试 target）见 Task 1 Step 1 的修订版（下文已更新）。
 
 ---
 
@@ -92,7 +93,7 @@
 - Create: `Resources/Assets.xcassets/AppIcon.appiconset/Contents.json`
 - Create: `.gitignore` 追加（`FlashNote.xcodeproj` 由 xcodegen 生成，不入库；见 Step 6）
 
-- [ ] **Step 1: 写 project.yml**
+- [x] **Step 1: 写 project.yml**
 
 ```yaml
 name: FlashNote
