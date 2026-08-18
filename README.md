@@ -40,8 +40,9 @@ xcodebuild -project FlashNote.xcodeproj -scheme FlashNote \
 
 ## 当前进度
 
-- **M1 完成**：工程骨架、直接录音（AVAudioEngine）、Apple Speech 实时转写（局部文本高亮 + 定稿段落）、本地保存（Application Support/FlashNote）、录音列表与详情（全文转写页签）
-- M2+：导入音频转写、AI 纪要（LLM 接入与风格模板）、iCloud 同步、文件夹与搜索、App 图标（见设计规格 §9）
+- **M1 完成**：工程骨架、直接录音（AVAudioEngine）、Apple Speech 实时转写（分句分行 + 时间戳）、本地保存、录音列表与详情
+- **M2 完成**：导入音频转写（云端 Whisper API）、设置页（引擎选择 + LLM 配置）、音频播放器；本地 WhisperKit 待网络恢复后接入
+- M3+：AI 纪要（LLM 接入与风格模板）、iCloud 同步、文件夹与搜索、App 图标（见设计规格 §9）
 
 ## 手动验证（macOS）
 

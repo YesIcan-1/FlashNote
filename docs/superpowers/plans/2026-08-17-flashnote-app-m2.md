@@ -810,8 +810,11 @@ git add Features App && git commit -m "feat: import UI, settings, and playback t
 
 **类型一致性：** `TranscriptSegment(startTime:endTime:text:isFinal:)`、`Recording(id:title:)/audioFilename/duration/markTranscribed`、`Transcript(recordingID:segments:language:)`、`LLMError.httpStatus/invalidResponse` 均来自核心包；`FileTranscriptionEngine` 在 Task 3 定义并在 Task 5 复用；`MockKeychain`/`MockFileEngine`/`InMemoryStore` 为测试替身。
 
+**执行结果（2026-08-18）：**
+- **WhisperKit 已顺延**：远程包克隆因 GitHub 网络不可达（curl 28 连接失败）受阻。Task 4 改为占位引擎（`isAvailable == false`），M2 交付云端引擎 + 导入 + 播放器 + 设置。本地 WhisperKit 待网络恢复后单独接入（保留 `WhisperKitEngine` 占位与 `FileTranscriptionEngine` 协议，接口不变）。
+
 **风险与取舍：**
-- WhisperKit 远程包 + 模型下载是最大不确定性（Task 4 前置验证）；若受阻，M2 先交付云端引擎，本地顺延。
+- WhisperKit 远程包 + 模型下载是最大不确定性（Task 4 前置验证）；已按预案顺延本地引擎，云端优先交付。
 - WhisperKit 具体 API 名以实际 SDK 为准（Task 4 Step 2 按需微调）。
 - `AppSettings` 的 `storeDirectory` 参数当前未用（预留）；Keychain 用 Security 框架。
 - 说话人自动分离不在本计划（数据已带时间戳，M2+ 单独立项）。
