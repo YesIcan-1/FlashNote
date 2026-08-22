@@ -7,11 +7,17 @@ import FlashNoteCore
 final class AppEnvironment {
     let store: RecordingStore
     /// 应用级设备会话：页面切换不应重建蓝牙状态与传输回调。
-    let deviceSession: DeviceViewModel
+    private(set) var deviceSession: DeviceViewModel?
 
     init(store: RecordingStore) {
         self.store = store
-        self.deviceSession = DeviceViewModel(store: store)
+    }
+
+    func startDeviceSession() -> DeviceViewModel {
+        if let deviceSession { return deviceSession }
+        let session = DeviceViewModel(store: store)
+        deviceSession = session
+        return session
     }
 
     /// 生产装配：文件存储落在 Application Support/FlashNote。

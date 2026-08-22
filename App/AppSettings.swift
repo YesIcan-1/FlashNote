@@ -57,7 +57,7 @@ final class KeychainAPIKeyStore: APIKeyStoring {
     }
 }
 
-/// 应用设置：转写引擎偏好 + LLM 连接（apiKey 存 Keychain）。
+/// 应用设置：转写引擎偏好 + LLM 连接。
 @Observable
 final class AppSettings {
     private let keychain: APIKeyStoring
@@ -84,8 +84,9 @@ final class AppSettings {
     }
 
     var llmAPIKey: String {
-        get { keychain.get("llmAPIKey") ?? "" }
-        set { keychain.set(newValue, for: "llmAPIKey") }
+        // 用户要求设置页不触发系统钥匙串授权；密钥仅保存在当前 Mac 的应用偏好中。
+        get { defaults.string(forKey: "llmAPIKey") ?? "" }
+        set { defaults.set(newValue, forKey: "llmAPIKey") }
     }
 
     init(storeDirectory: URL, keychain: APIKeyStoring = KeychainAPIKeyStore(), defaults: UserDefaults = .standard) {

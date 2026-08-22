@@ -17,7 +17,7 @@ struct DevicePanelView: View {
         }
         .navigationTitle("录音笔")
         .task {
-            environment?.deviceSession.onAppear()
+            environment?.startDeviceSession().onAppear()
         }
     }
 

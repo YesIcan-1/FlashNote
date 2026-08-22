@@ -8,6 +8,7 @@ struct WorkbenchView: View {
     @State private var recordings: [Recording] = []
     @State private var showingRecorder = false
     @State private var showingImport = false
+    @State private var selectedRecording: Recording?
 
     var body: some View {
         ScrollView {
@@ -23,6 +24,9 @@ struct WorkbenchView: View {
         .navigationTitle("工作台")
         .sheet(isPresented: $showingRecorder) { RecorderView() }
         .sheet(isPresented: $showingImport) { ImportAudioView() }
+        .sheet(item: $selectedRecording) { recording in
+            NavigationStack { RecordingDetailView(recording: recording) }
+        }
         .onAppear(perform: reload)
         .onChange(of: showingRecorder) { _, showing in if !showing { reload() } }
         .onChange(of: showingImport) { _, showing in if !showing { reload() } }
@@ -81,8 +85,11 @@ struct WorkbenchView: View {
                 Card {
                     VStack(spacing: 0) {
                         ForEach(recordings.prefix(5)) { recording in
-                            RecordingRow(recording: recording)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button { selectedRecording = recording } label: {
+                                RecordingRow(recording: recording)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
                             if recording.id != recordings.prefix(5).last?.id { Divider() }
                         }
                     }
