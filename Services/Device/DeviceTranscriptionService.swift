@@ -13,6 +13,8 @@ final class DeviceTranscriptionService {
     private let store: RecordingStore
     private let storeDirectory: URL
 
+    /// 进度 + 状态回调（供 ViewModel 刷新 UI）。
+    var onProgress: ((Double, String) -> Void)?
     private(set) var progress: Double = 0
     private(set) var statusText = ""
 
@@ -25,8 +27,11 @@ final class DeviceTranscriptionService {
 
     /// 下载设备文件并转写保存。
     func downloadAndTranscribe(file: CB08FileEntry, title: String) async throws -> Transcript {
-        // WAV 体积估算：时长(秒) × 32000 B/s + 44 头（参考实现）
-        expectedSize = UInt32(max(1, Int(file.time) * 32000 + 44))
+        // 设备列表 size 是实际传输的压缩文件大小；用它作为下载进度分母，
+        // WAV 只是后续解码产物，不能用于衡量 BLE 下载进度。
+        expectedSize = max(1, file.size)
+        progress = 0
+        onProgress?(0, "开始下载…")
         
         let (data, actualName) = try await download(file: file)
 
@@ -37,6 +42,7 @@ final class DeviceTranscriptionService {
         try data.write(to: dest)
 
         statusText = "转写中…"
+        onProgress?(1, statusText)
         let segments = try await engine.transcribe(audioFileURL: dest, language: "zh")
         let transcript = Transcript(recordingID: id, segments: segments, language: "zh")
 
@@ -51,7 +57,7 @@ final class DeviceTranscriptionService {
 
     /// 异步下载（候选名回退：base.wav → base.opus → 原始名）。
     private func download(file: CB08FileEntry) async throws -> (Data, String) {
-        let candidates = file.candidateNames
+        let candidates = preferredDownloadCandidates(for: file)
         var lastError: Error = DeviceError.downloadCode(0)
         for (index, name) in candidates.enumerated() {
             do {
@@ -64,6 +70,17 @@ final class DeviceTranscriptionService {
             }
         }
         throw lastError
+    }
+
+    /// 优先获取设备中的压缩 OPUS 文件；无法获取时再请求 WAV 和原始截断名。
+    private func preferredDownloadCandidates(for file: CB08FileEntry) -> [String] {
+        let candidates = file.candidateNames
+        let opus = candidates.filter { $0.lowercased().hasSuffix(".opus") }
+        let wav = candidates.filter { $0.lowercased().hasSuffix(".wav") }
+        let raw = candidates.filter { name in
+            !name.lowercased().hasSuffix(".opus") && !name.lowercased().hasSuffix(".wav")
+        }
+        return Array(NSOrderedSet(array: opus + wav + raw)) as? [String] ?? candidates
     }
 
     private var expectedSize: UInt32 = 0
@@ -95,16 +112,19 @@ final class DeviceTranscriptionService {
 
             device.onDownloadData = { [weak self] d in
                 buffer.append(d)
-                if let self, self.expectedSize > 0 {
-                    self.progress = min(1, Double(buffer.count) / Double(self.expectedSize))
+                if let self {
+                    let p = self.expectedSize > 0 ? min(1, Double(buffer.count) / Double(self.expectedSize)) : 0
+                    self.progress = p
+                    self.statusText = "下载中 \(buffer.count) 字节"
+                    self.onProgress?(p, self.statusText)
                 }
-                self?.statusText = "下载中 \(buffer.count) 字节"
                 restartIdle()
             }
             device.onDownloadComplete = { [weak self] data, actualName in
                 idleTask?.cancel()
                 self?.statusText = "下载完成"
                 self?.progress = 1
+                self?.onProgress?(1, self?.statusText ?? "下载完成")
                 resumeIfNeeded(.success((data, actualName)))
             }
             device.onDownloadCode = { code in

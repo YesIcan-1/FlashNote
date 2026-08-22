@@ -11,8 +11,15 @@ import FlashNoteCore
 final class MockBLETransport: BLETransport {
     var wrote: [Data] = []
     var onNotify: ((Data) -> Void)?
+    var onEventNotify: ((Data) -> Void)?
     func write(_ data: Data) { wrote.append(data) }
-    func subscribe(onNotify: @escaping (Data) -> Void) { self.onNotify = onNotify }
+    func subscribe(
+        onControlNotify: @escaping (Data) -> Void,
+        onEventNotify: @escaping (Data) -> Void
+    ) {
+        self.onNotify = onControlNotify
+        self.onEventNotify = onEventNotify
+    }
 }
 
 /// 测试辅助：解析一个字节中的帧。
@@ -84,6 +91,26 @@ struct CB08DeviceTests {
         #expect(audio.count == 1)
         #expect(audio[0] == Data([1,2,3]))
         #expect(state == 0)
+    }
+
+    @Test func eventChannelPublishesRecordState() {
+        let (device, transport) = makeDevice()
+        var state: UInt8?
+        device.onRecordState = { state = $0 }
+
+        transport.onEventNotify?(frameData(type: 3, cmd: 20, params: Data([2])))
+
+        #expect(state == 2)
+    }
+
+    @Test func versionResponseIsPublished() {
+        let (device, transport) = makeDevice()
+        var version: String?
+        device.onFirmware = { version = $0 }
+
+        transport.onNotify?(frameData(type: 0, cmd: 11, params: Data("V1.0.0".utf8)))
+
+        #expect(version == "V1.0.0")
     }
 
     private func entryBody(_ n: Int) -> Data {

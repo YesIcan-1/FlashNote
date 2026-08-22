@@ -115,7 +115,7 @@ struct DevicePanelView: View {
                             Text(file.candidateNames.first ?? file.name)
                                 .lineLimit(1)
                             Spacer()
-                            Text(fileSizeText(file.size))
+                            Text(fileSizeText(UInt32(max(1, Int(file.time) * 32000 + 44))) + " (WAV)")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.secondaryText)
                         }
@@ -135,7 +135,7 @@ struct DevicePanelView: View {
 
 /// 文件大小格式化：≥10MB 显示 MB，否则 KB。
 private func fileSizeText(_ bytes: UInt32) -> String {
-    if bytes >= 10_485_760 {
+    if bytes >= 1_048_576 {
         return String(format: "%.1f MB", Double(bytes) / 1_048_576)
     } else if bytes >= 1024 {
         return String(format: "%.0f KB", Double(bytes) / 1024)

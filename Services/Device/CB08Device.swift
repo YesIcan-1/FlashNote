@@ -6,7 +6,8 @@ import FlashNoteCore
 final class CB08Device {
     private let transport: BLETransport
     private let seqGenerator: () -> UInt8
-    private var parser = CB08FrameParser()
+    private var controlParser = CB08FrameParser()
+    private var eventParser = CB08FrameParser()
     private var fileBuffer: [CB08FileEntry] = []
 
     /// 下载会话状态。
@@ -22,11 +23,15 @@ final class CB08Device {
     var onRealtimeState: ((UInt8) -> Void)?
     var onRecordState: ((UInt8) -> Void)?
     var onAuthCode: ((String) -> Void)?
+    var onFirmware: ((String) -> Void)?
 
     init(transport: BLETransport, seqGenerator: @escaping () -> UInt8) {
         self.transport = transport
         self.seqGenerator = seqGenerator
-        transport.subscribe { [weak self] data in self?.handleNotification(data) }
+        transport.subscribe(
+            onControlNotify: { [weak self] data in self?.handleControlNotification(data) },
+            onEventNotify: { [weak self] data in self?.handleEventNotification(data) }
+        )
     }
 
     func send(type: UInt8, cmd: UInt8, params: Data = Data()) {
@@ -52,12 +57,13 @@ final class CB08Device {
     func recordPause(paused: Bool) { send(type: 3, cmd: paused ? 5 : 7) }
     func recordState() { send(type: 3, cmd: 19) }
 
-    private func handleNotification(_ data: Data) {
-        for frame in parser.feed(data) {
+    private func handleControlNotification(_ data: Data) {
+        for frame in controlParser.feed(data) {
             switch frame.type {
             case 0:
                 if frame.cmd == 4, let p = frame.params.first { onBattery?(Int(p)) }
                 else if frame.cmd == 13 { onAuthCode?(String(data: frame.params, encoding: .utf8) ?? "") }
+                else if frame.cmd == 11 { onFirmware?(Self.trimmedText(frame.params)) }
             case 1:
                 if frame.cmd == 1 { onRealtimeAudio?(frame.params) }
                 else if frame.cmd == 4 { frame.params.first.map { onRealtimeState?($0) } }
@@ -68,6 +74,19 @@ final class CB08Device {
             default: break
             }
         }
+    }
+
+    private func handleEventNotification(_ data: Data) {
+        for frame in eventParser.feed(data) where frame.type == 3 {
+            if frame.cmd == 20, let state = frame.params.first {
+                onRecordState?(state)
+            }
+        }
+    }
+
+    private static func trimmedText(_ data: Data) -> String {
+        String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\0 \n\r\t")) ?? ""
     }
 
     private func handleFile(type2cmd cmd: UInt8?, params: Data) {

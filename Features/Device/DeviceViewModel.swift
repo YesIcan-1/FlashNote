@@ -16,6 +16,7 @@ final class DeviceViewModel {
     private(set) var phase: Phase = .idle
     private(set) var battery: Int?
     private(set) var firmware: String?
+    private(set) var recordState: UInt8?
     private(set) var files: [CB08FileEntry] = []
     private(set) var statusText = "扫描以连接 CB08 录音笔"
     private(set) var progress: Double = 0
@@ -70,6 +71,7 @@ final class DeviceViewModel {
     func refreshInfo() {
         device?.requestBattery()
         device?.requestVersion()
+        device?.recordState()
         device?.requestFileList()
     }
 
@@ -78,6 +80,8 @@ final class DeviceViewModel {
             statusText = "设备未连接"
             return
         }
+        progress = 0
+        statusText = "下载并转写中…"
         Task {
             statusText = "下载并转写中…"
             do {
@@ -116,12 +120,18 @@ final class DeviceViewModel {
             self.device = device
             device.onBattery = { self.battery = $0 }
             device.onFileList = { self.files = $0 }
+            device.onFirmware = { self.firmware = $0 }
+            device.onRecordState = { self.recordState = $0 }
             let settings = AppSettings(storeDirectory: AppEnvironment.defaultStoreDirectory())
             self.transcription = DeviceTranscriptionService(
                 device: device,
                 engine: FileTranscriptionEngineFactory.make(settings: settings),
                 store: self.store
             )
+            self.transcription?.onProgress = { [weak self] p, status in
+                self?.progress = p
+                self?.statusText = status
+            }
             self.phase = .connected
             self.statusText = "已连接，读取设备信息…"
             self.refreshInfo()

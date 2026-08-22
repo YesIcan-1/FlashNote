@@ -27,11 +27,14 @@ final class CB08Central: NSObject, BLETransport {
     private var peripheral: CBPeripheral?
     private var writeChar: CBCharacteristic?
     private var notifyChar: CBCharacteristic?
-    private var onNotify: ((Data) -> Void)?
+    private var eventChar: CBCharacteristic?
+    private var onControlNotify: ((Data) -> Void)?
+    private var onEventNotify: ((Data) -> Void)?
 
     static let serviceUUID = CBUUID(string: "AE20")
     private static let writeUUID = CBUUID(string: "AE21")
     private static let notifyUUID = CBUUID(string: "AE22")
+    private static let eventUUID = CBUUID(string: "AE23")
 
     private override init() {
         super.init()
@@ -65,6 +68,7 @@ final class CB08Central: NSObject, BLETransport {
         if let peripheral { manager.cancelPeripheralConnection(peripheral) }
         writeChar = nil
         notifyChar = nil
+        eventChar = nil
     }
 
     // MARK: BLETransport
@@ -74,8 +78,12 @@ final class CB08Central: NSObject, BLETransport {
         peripheral.writeValue(data, for: writeChar, type: .withoutResponse)
     }
 
-    func subscribe(onNotify: @escaping (Data) -> Void) {
-        self.onNotify = onNotify
+    func subscribe(
+        onControlNotify: @escaping (Data) -> Void,
+        onEventNotify: @escaping (Data) -> Void
+    ) {
+        self.onControlNotify = onControlNotify
+        self.onEventNotify = onEventNotify
     }
 }
 
@@ -114,25 +122,42 @@ extension CB08Central: CBCentralManagerDelegate {
 extension CB08Central: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard let service = peripheral.services?.first(where: { $0.uuid == Self.serviceUUID }) else { return }
-        peripheral.discoverCharacteristics([Self.writeUUID, Self.notifyUUID], for: service)
+        peripheral.discoverCharacteristics([Self.writeUUID, Self.notifyUUID, Self.eventUUID], for: service)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         writeChar = service.characteristics?.first(where: { $0.uuid == Self.writeUUID })
-        if let notify = service.characteristics?.first(where: { $0.uuid == Self.notifyUUID }) {
-            notifyChar = notify
-            peripheral.setNotifyValue(true, for: notify)
-        }
-        // 特性就绪后才视为"已连接"，此时写通道可用，可发命令
-        isConnected = true
-        if writeChar != nil {
-            onPeripheralConnected?()
+        notifyChar = service.characteristics?.first(where: { $0.uuid == Self.notifyUUID })
+        eventChar = service.characteristics?.first(where: { $0.uuid == Self.eventUUID })
+        if let notifyChar { peripheral.setNotifyValue(true, for: notifyChar) }
+        if let eventChar { peripheral.setNotifyValue(true, for: eventChar) }
+        if writeChar == nil || notifyChar == nil || eventChar == nil {
+            onError?("设备缺少必要的 BLE 特征")
         }
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard characteristic.uuid == Self.notifyUUID, let value = characteristic.value else { return }
+    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        if let error {
+            onError?("订阅设备通知失败：\(error.localizedDescription)")
+            return
+        }
+        guard writeChar != nil,
+              notifyChar?.isNotifying == true,
+              eventChar?.isNotifying == true,
+              !isConnected else { return }
+        isConnected = true
+        onPeripheralConnected?()
+    }
 
-        onNotify?(value)
+    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard let value = characteristic.value else { return }
+        switch characteristic.uuid {
+        case Self.notifyUUID:
+            onControlNotify?(value)
+        case Self.eventUUID:
+            onEventNotify?(value)
+        default:
+            break
+        }
     }
 }

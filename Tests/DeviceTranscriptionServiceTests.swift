@@ -57,4 +57,20 @@ struct DeviceTranscriptionServiceTests {
         _ = try await task.value
         #expect(try store.fetchRecordings().count == 1)
     }
+
+    @Test func downloadProgressUsesCompressedFileSize() async throws {
+        let (service, transport, _) = makeService()
+        let file = CB08FileEntry(time: 173, size: 64, name: "note")
+        var reportedProgress: [Double] = []
+        service.onProgress = { progress, _ in reportedProgress.append(progress) }
+
+        let task = Task { try await service.downloadAndTranscribe(file: file, title: "note") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        transport.onNotify?(frameData(type: 2, cmd: 3, params: Data("note.wav".utf8)))
+        transport.onNotify?(frameData(type: 2, cmd: 4, params: Data(repeating: 1, count: 32)))
+        #expect(reportedProgress.contains { abs($0 - 0.5) < 0.001 })
+        transport.onNotify?(frameData(type: 2, cmd: 4, params: Data(repeating: 1, count: 32)))
+        transport.onNotify?(frameData(type: 2, cmd: 5, params: Data([0])))
+        _ = try await task.value
+    }
 }
