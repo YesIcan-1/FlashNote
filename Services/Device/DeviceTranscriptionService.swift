@@ -3,6 +3,7 @@ import FlashNoteCore
 
 enum DeviceError: Error, Equatable {
     case downloadCode(UInt8)
+    case incompleteDownload
 }
 
 /// 设备文件 → 下载 WAV → 转写 → 保存 Transcript 的编排器。
@@ -12,17 +13,19 @@ final class DeviceTranscriptionService {
     private let engine: FileTranscriptionEngine
     private let store: RecordingStore
     private let storeDirectory: URL
+    private let idleTimeoutNanoseconds: UInt64
 
     /// 进度 + 状态回调（供 ViewModel 刷新 UI）。
     var onProgress: ((Double, String) -> Void)?
     private(set) var progress: Double = 0
     private(set) var statusText = ""
 
-    init(device: CB08Device, engine: FileTranscriptionEngine, store: RecordingStore, storeDirectory: URL = AppEnvironment.defaultStoreDirectory()) {
+    init(device: CB08Device, engine: FileTranscriptionEngine, store: RecordingStore, storeDirectory: URL = AppEnvironment.defaultStoreDirectory(), idleTimeoutNanoseconds: UInt64 = 6_000_000_000) {
         self.device = device
         self.engine = engine
         self.store = store
         self.storeDirectory = storeDirectory
+        self.idleTimeoutNanoseconds = idleTimeoutNanoseconds
     }
 
     /// 下载设备文件并转写保存。
@@ -104,18 +107,14 @@ final class DeviceTranscriptionService {
                 cont.resume(with: result)
             }
 
-            // 空闲超时兜底：收到数据后若 6s 无新数据（且无结束帧），视为完成
+            // 空闲超时表示传输中断；只有设备结束帧才允许成功落盘。
             var idleTask: Task<Void, Never>?
             func restartIdle() {
                 idleTask?.cancel()
                 idleTask = Task {
-                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                    try? await Task.sleep(nanoseconds: self.idleTimeoutNanoseconds)
                     guard !Task.isCancelled else { return }
-                    if !buffer.isEmpty {
-                        resumeIfNeeded(.success((buffer, name)))
-                    } else {
-                        resumeIfNeeded(.failure(DeviceError.downloadCode(1)))
-                    }
+                    resumeIfNeeded(.failure(buffer.isEmpty ? DeviceError.downloadCode(1) : DeviceError.incompleteDownload))
                 }
             }
 

@@ -5,12 +5,11 @@ import CoreBluetooth
 /// 设备面板：连接 QS668 录音笔、设备信息、文件列表、下载转写、录音控制。
 struct DevicePanelView: View {
     @Environment(\.appEnvironment) private var environment
-    @State private var viewModel: DeviceViewModel?
     @State private var isScanning = false
 
     var body: some View {
         Group {
-            if let viewModel {
+            if let viewModel = environment?.deviceSession {
                 content(viewModel)
             } else {
                 ProgressView()
@@ -18,10 +17,7 @@ struct DevicePanelView: View {
         }
         .navigationTitle("录音笔")
         .task {
-            if let env = environment, viewModel == nil {
-                viewModel = DeviceViewModel(store: env.store)
-                viewModel?.onAppear()
-            }
+            environment?.deviceSession.onAppear()
         }
     }
 

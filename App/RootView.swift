@@ -51,24 +51,22 @@ struct RootView: View {
                     .help("设置")
                 }
             }
-        } content: {
+        } detail: {
             switch sidebarItem {
             case .workbench:
                 WorkbenchView { sidebarItem = .device }
             case .recordings:
-                RecordingListView(selectedID: $selection)
+                if let selection,
+                   let recording = recordings.first(where: { $0.id == selection }) {
+                    RecordingDetailView(recording: recording)
+                        .id(recording.id)
+                } else {
+                    RecordingListView(selectedID: $selection)
+                }
             case .files:
                 FileCenterView()
             case .device:
                 DevicePanelView()
-            }
-        } detail: {
-            if let selection,
-               let recording = recordings.first(where: { $0.id == selection }) {
-                RecordingDetailView(recording: recording)
-                    .id(recording.id)
-            } else {
-                ContentUnavailableView("选择一条录音", systemImage: AppIcons.document)
             }
         }
         .frame(minWidth: 1000, minHeight: 620)

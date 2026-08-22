@@ -8,14 +8,23 @@ import FlashNoteCore
 #endif
 
 struct DeviceTranscriptionServiceTests {
-    private func makeService() -> (DeviceTranscriptionService, MockBLETransport, InMemoryStore) {
+    private func makeService(idleTimeoutNanoseconds: UInt64 = 6_000_000_000) -> (DeviceTranscriptionService, MockBLETransport, InMemoryStore) {
         let transport = MockBLETransport()
         let device = CB08Device(transport: transport, seqGenerator: { 0 })
         let engine = MockFileEngine()
         let store = InMemoryStore()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Dev-\(UUID().uuidString)")
-        let service = DeviceTranscriptionService(device: device, engine: engine, store: store, storeDirectory: root)
+        let service = DeviceTranscriptionService(device: device, engine: engine, store: store, storeDirectory: root, idleTimeoutNanoseconds: idleTimeoutNanoseconds)
         return (service, transport, store)
+    }
+
+    @Test func incompleteDownloadIsNotSavedAsTranscription() async throws {
+        let (service, transport, store) = makeService(idleTimeoutNanoseconds: 20_000_000)
+        let task = Task { try await service.downloadAndTranscribe(file: .init(time: 1, size: 64, name: "note"), title: "note") }
+        try await Task.sleep(nanoseconds: 10_000_000)
+        transport.onNotify?(frameData(type: 2, cmd: 4, params: Data(repeating: 1, count: 20)))
+        await #expect(throws: DeviceError.incompleteDownload) { try await task.value }
+        #expect(try store.fetchRecordings().isEmpty)
     }
 
     @Test func downloadAndTranscribeSavesRecording() async throws {

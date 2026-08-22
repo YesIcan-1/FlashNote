@@ -24,6 +24,16 @@ struct SettingsView: View {
 
     private func form(_ settings: AppSettings) -> some View {
         Form {
+            Section("外观") {
+                Picker("显示模式", selection: Binding(
+                    get: { settings.appearanceMode },
+                    set: { settings.appearanceMode = $0 }
+                )) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+            }
             Section("转写引擎") {
                 Picker("导入音频转写", selection: Binding(
                     get: { settings.transcriptionEngine },
@@ -40,7 +50,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("LLM 连接（云端转写与 AI 纪要共用）") {
+            Section("API 设置（云端转写与 AI 纪要共用）") {
                 TextField("Base URL", text: Binding(
                     get: { settings.llmBaseURL },
                     set: { settings.llmBaseURL = $0 }
