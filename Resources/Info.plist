@@ -24,5 +24,9 @@
 	<string>用于录制音频并实时转写</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>用于实时语音转写</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>用于连接 QS668 录音笔并传输音频与文件</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>用于连接 QS668 录音笔并传输音频与文件</string>
 </dict>
 </plist>
