@@ -35,11 +35,20 @@ final class DeviceTranscriptionService {
         
         let (data, actualName) = try await download(file: file)
 
+        let audioData: Data
+        if actualName.lowercased().hasSuffix(".opus") {
+            statusText = "正在解码为 WAV…"
+            onProgress?(1, statusText)
+            audioData = try CB08OpusFileDecoder.decodeToWAV(data)
+        } else {
+            audioData = data
+        }
+
         let id = UUID()
         let audioDir = storeDirectory.appendingPathComponent("audio", isDirectory: true)
         try FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
         let dest = audioDir.appendingPathComponent("\(id.uuidString).wav")
-        try data.write(to: dest)
+        try audioData.write(to: dest)
 
         statusText = "转写中…"
         onProgress?(1, statusText)
@@ -55,7 +64,7 @@ final class DeviceTranscriptionService {
         return transcript
     }
 
-    /// 异步下载（候选名回退：base.wav → base.opus → 原始名）。
+    /// 异步下载（候选名回退：base.opus → base.wav → 原始名）。
     private func download(file: CB08FileEntry) async throws -> (Data, String) {
         let candidates = preferredDownloadCandidates(for: file)
         var lastError: Error = DeviceError.downloadCode(0)

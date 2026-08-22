@@ -83,6 +83,7 @@ struct DevicePanelView: View {
         HStack(spacing: 16) {
             StatBox(label: "电量", value: vm.battery.map { "\($0)%" } ?? "—")
             StatBox(label: "固件", value: vm.firmware ?? "—")
+            StatBox(label: "录音", value: recordStateText(vm.recordState))
             StatBox(label: "文件", value: "\(vm.files.count)")
             Button("刷新") { vm.refreshInfo() }
                 .buttonStyle(.bordered)
@@ -92,6 +93,10 @@ struct DevicePanelView: View {
         }
         HStack(spacing: 12) {
             Button("开始录音") { vm.recordStart() }
+            Button(vm.recordState == 1 ? "暂停录音" : "继续录音") {
+                vm.recordPause(paused: vm.recordState == 1)
+            }
+            .disabled(vm.recordState == nil)
             Button("保存") { vm.recordSave() }
             Button("实时推流") { vm.realtimeStart() }
             Button("停止流") { vm.realtimeStop() }
@@ -115,7 +120,7 @@ struct DevicePanelView: View {
                             Text(file.candidateNames.first ?? file.name)
                                 .lineLimit(1)
                             Spacer()
-                            Text(fileSizeText(UInt32(max(1, Int(file.time) * 32000 + 44))) + " (WAV)")
+                            Text(fileSizeText(file.size) + " · 设备文件")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.secondaryText)
                         }
@@ -130,6 +135,15 @@ struct DevicePanelView: View {
                 .font(.callout)
             }
         }
+    }
+}
+
+private func recordStateText(_ state: UInt8?) -> String {
+    switch state {
+    case 1: "录制中"
+    case 2: "已暂停"
+    case 0: "空闲"
+    default: "—"
     }
 }
 

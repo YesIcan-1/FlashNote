@@ -40,17 +40,17 @@ struct DeviceTranscriptionServiceTests {
 
     @Test func downloadCode1RetriesNextCandidate() async throws {
         let (service, transport, store) = makeService()
-        // 无扩展名 → 候选 ["note.wav", "note.opus", "note"]
+        // 无扩展名时优先尝试 .opus，再回退到 .wav 和原始名。
         let file = CB08FileEntry(time: 5, size: 100, name: "note")
 
         let task = Task { try await service.downloadAndTranscribe(file: file, title: "x") }
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        // 第一次候选 .wav：code=1 不存在 → 换下一候选
+        // 首选 .opus 不存在 → 回退到 WAV。
         transport.onNotify?(frameData(type: 2, cmd: 5, params: Data([1])))
         try await Task.sleep(nanoseconds: 50_000_000)
-        // 第二次候选 .opus：成功
-        transport.onNotify?(frameData(type: 2, cmd: 3, params: Data(Array("note.opus".utf8))))
+        // 第二次候选 .wav：成功
+        transport.onNotify?(frameData(type: 2, cmd: 3, params: Data(Array("note.wav".utf8))))
         transport.onNotify?(frameData(type: 2, cmd: 4, params: Data([9, 9])))
         transport.onNotify?(frameData(type: 2, cmd: 5, params: Data([0])))
 

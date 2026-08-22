@@ -9,12 +9,21 @@ enum SidebarItem: Hashable {
     case device
 }
 
+private enum MobileTab: Hashable {
+    case workbench
+    case recordings
+    case files
+    case device
+    case settings
+}
+
 struct RootView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var recordings: [Recording] = []
     @State private var selection: UUID?
     @State private var showingSettings = false
     @State private var sidebarItem: SidebarItem = .workbench
+    @State private var mobileTab: MobileTab = .workbench
 
     var body: some View {
 #if os(macOS)
@@ -69,11 +78,12 @@ struct RootView: View {
             SettingsView()
         }
 #else
-        TabView {
+        TabView(selection: $mobileTab) {
             NavigationStack {
-                WorkbenchView { }
+                WorkbenchView { mobileTab = .device }
             }
             .tabItem { Label("工作台", systemImage: AppIcons.home) }
+            .tag(MobileTab.workbench)
             NavigationStack {
                 RecordingListView(selectedID: $selection)
                     .navigationDestination(for: UUID.self) { id in
@@ -83,12 +93,16 @@ struct RootView: View {
                     }
             }
             .tabItem { Label("录音库", systemImage: AppIcons.mic) }
+            .tag(MobileTab.recordings)
             NavigationStack { FileCenterView() }
                 .tabItem { Label("文件", systemImage: AppIcons.files) }
+                .tag(MobileTab.files)
             DevicePanelView()
-                .tabItem { Label("录音笔", systemImage: AppIcons.settings) }
+                .tabItem { Label("录音笔", systemImage: AppIcons.device) }
+                .tag(MobileTab.device)
             SettingsView()
                 .tabItem { Label("设置", systemImage: AppIcons.settings) }
+                .tag(MobileTab.settings)
         }
 #endif
     }
