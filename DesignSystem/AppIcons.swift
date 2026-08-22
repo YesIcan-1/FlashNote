@@ -18,4 +18,7 @@ enum AppIcons {
     static let importFile = "square.and.arrow.down"
     static let clock = "clock"
     static let delete = "trash"
+    static let device = "waveform.and.mic"
+    static let files = "tray.full.fill"
+    static let home = "rectangle.grid.1x2.fill"
 }

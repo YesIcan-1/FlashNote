@@ -19,6 +19,21 @@ final class ImportTranscriptionViewModel {
     func recordings() -> [Recording] { cachedRecordings }
 
     func importAndTranscribe(sourceURL: URL, title: String) async throws {
+        try await importAndTranscribe(sourceURL: sourceURL, title: title, language: "zh")
+    }
+
+    /// 依次处理多个来源，避免同时调用云端转写造成顺序与资源不可控。
+    func importAndTranscribe(sourceURLs: [URL], language: String = "zh") async throws {
+        for sourceURL in sourceURLs {
+            try await importAndTranscribe(
+                sourceURL: sourceURL,
+                title: sourceURL.deletingPathExtension().lastPathComponent,
+                language: language
+            )
+        }
+    }
+
+    private func importAndTranscribe(sourceURL: URL, title: String, language: String) async throws {
         let id = UUID()
         let audioDir = storeDirectory.appendingPathComponent("audio", isDirectory: true)
         try FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
@@ -34,8 +49,8 @@ final class ImportTranscriptionViewModel {
             throw TranscriptionError.engineFailed("mock failure")
         }
 
-        let segments = try await engine.transcribe(audioFileURL: destURL, language: "zh")
-        let transcript = Transcript(recordingID: id, segments: segments, language: "zh")
+        let segments = try await engine.transcribe(audioFileURL: destURL, language: language)
+        let transcript = Transcript(recordingID: id, segments: segments, language: language)
         try store.upsertTranscript(transcript)
         recording.markTranscribed()
         try store.upsertRecording(recording)

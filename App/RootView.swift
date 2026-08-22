@@ -3,7 +3,9 @@ import FlashNoteCore
 
 /// 侧边栏固定项（与录音 UUID 区分，用于路由内容区）。
 enum SidebarItem: Hashable {
+    case workbench
     case recordings
+    case files
     case device
 }
 
@@ -12,29 +14,21 @@ struct RootView: View {
     @State private var recordings: [Recording] = []
     @State private var selection: UUID?
     @State private var showingSettings = false
-    @State private var sidebarItem: SidebarItem = .recordings
+    @State private var sidebarItem: SidebarItem = .workbench
 
     var body: some View {
 #if os(macOS)
         NavigationSplitView {
             List(selection: $sidebarItem) {
-                Label("所有录音", systemImage: AppIcons.mic)
+                Label("工作台", systemImage: AppIcons.home)
                     .fontWeight(.semibold)
+                    .tag(SidebarItem.workbench)
+                Label("所有录音", systemImage: AppIcons.mic)
                     .tag(SidebarItem.recordings)
-                Label("录音笔", systemImage: AppIcons.settings)
+                Label("文件", systemImage: AppIcons.files)
+                    .tag(SidebarItem.files)
+                Label("录音笔", systemImage: AppIcons.device)
                     .tag(SidebarItem.device)
-                Label("工作", systemImage: AppIcons.folder)
-                    .foregroundStyle(.secondary)
-                    .disabled(true)
-                Label("课程", systemImage: AppIcons.book)
-                    .foregroundStyle(.secondary)
-                    .disabled(true)
-                Label("会议", systemImage: AppIcons.chat)
-                    .foregroundStyle(.secondary)
-                    .disabled(true)
-                Text("文件夹筛选将在 M4 提供")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.secondaryText)
             }
             .navigationTitle("FlashNote")
             .listStyle(.sidebar)
@@ -50,8 +44,12 @@ struct RootView: View {
             }
         } content: {
             switch sidebarItem {
+            case .workbench:
+                WorkbenchView { sidebarItem = .device }
             case .recordings:
                 RecordingListView(selectedID: $selection)
+            case .files:
+                FileCenterView()
             case .device:
                 DevicePanelView()
             }
@@ -73,6 +71,10 @@ struct RootView: View {
 #else
         TabView {
             NavigationStack {
+                WorkbenchView { }
+            }
+            .tabItem { Label("工作台", systemImage: AppIcons.home) }
+            NavigationStack {
                 RecordingListView(selectedID: $selection)
                     .navigationDestination(for: UUID.self) { id in
                         if let recording = recordings.first(where: { $0.id == id }) {
@@ -80,9 +82,9 @@ struct RootView: View {
                         }
                     }
             }
-            .tabItem { Label("录音", systemImage: AppIcons.mic) }
-            ContentUnavailableView("文件夹将在 M4 实现", systemImage: AppIcons.folder)
-                .tabItem { Label("文件夹", systemImage: AppIcons.folder) }
+            .tabItem { Label("录音库", systemImage: AppIcons.mic) }
+            NavigationStack { FileCenterView() }
+                .tabItem { Label("文件", systemImage: AppIcons.files) }
             DevicePanelView()
                 .tabItem { Label("录音笔", systemImage: AppIcons.settings) }
             SettingsView()

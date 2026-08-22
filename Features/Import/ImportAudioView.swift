@@ -8,12 +8,12 @@ struct ImportAudioView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var showingImporter = false
     @State private var viewModel: ImportTranscriptionViewModel?
-    @State private var statusText = "选择音频文件开始导入转写"
+    @State private var statusText = "选择音频或视频文件开始导入转写"
     @State private var isWorking = false
 
     var body: some View {
         VStack(spacing: 16) {
-            Text("导入音频转写")
+            Text("导入音视频转写")
                 .font(.title3.bold())
             Text(statusText)
                 .foregroundStyle(AppTheme.secondaryText)
@@ -21,7 +21,7 @@ struct ImportAudioView: View {
             if isWorking {
                 ProgressView()
             }
-            Button("选择音频文件") {
+            Button("选择音视频文件") {
                 showingImporter = true
             }
             .buttonStyle(.borderedProminent)
@@ -31,30 +31,33 @@ struct ImportAudioView: View {
         .frame(minWidth: 420, minHeight: 220)
         .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: [.audio],
-            allowsMultipleSelection: false
+            allowedContentTypes: [.audio, .movie],
+            allowsMultipleSelection: true
         ) { result in
             switch result {
             case .success(let urls):
-                guard let url = urls.first else { return }
-                Task { await importAndTranscribe(url) }
+                guard !urls.isEmpty else { return }
+                Task { await importAndTranscribe(urls) }
             case .failure(let error):
                 statusText = "导入失败：\(error.localizedDescription)"
             }
         }
     }
 
-    private func importAndTranscribe(_ url: URL) async {
+    private func importAndTranscribe(_ urls: [URL]) async {
         guard let env = environment else { return }
         isWorking = true
-        statusText = "转写中…"
+        statusText = urls.count == 1 ? "转写中…" : "正在处理 1 / \(urls.count)…"
         let settings = AppSettings(storeDirectory: AppEnvironment.defaultStoreDirectory())
         let engine = FileTranscriptionEngineFactory.make(settings: settings)
         let vm = ImportTranscriptionViewModel(store: env.store, engine: engine)
         viewModel = vm
         do {
-            try await vm.importAndTranscribe(sourceURL: url, title: url.deletingPathExtension().lastPathComponent)
-            statusText = "转写完成"
+            for (index, url) in urls.enumerated() {
+                statusText = urls.count == 1 ? "转写中…" : "正在处理 \(index + 1) / \(urls.count)…"
+                try await vm.importAndTranscribe(sourceURL: url, title: url.deletingPathExtension().lastPathComponent)
+            }
+            statusText = urls.count == 1 ? "转写完成" : "已完成 \(urls.count) 个文件"
             try? await Task.sleep(nanoseconds: 600_000_000)
             dismiss()
         } catch {
