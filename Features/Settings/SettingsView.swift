@@ -5,6 +5,9 @@ import FlashNoteCore
 struct SettingsView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var settings: AppSettings?
+    @State private var availableModels: [String] = []
+    @State private var modelLoadError: String?
+    @State private var isLoadingModels = false
 
     var body: some View {
         Group {
@@ -59,13 +62,35 @@ struct SettingsView: View {
                     get: { settings.llmModel },
                     set: { settings.llmModel = $0 }
                 ))
+                if !availableModels.isEmpty {
+                    Picker("已识别模型", selection: Binding(
+                        get: { settings.llmModel },
+                        set: { settings.llmModel = $0 }
+                    )) {
+                        ForEach(availableModels, id: \.self) { Text($0).tag($0) }
+                    }
+                }
                 SecureField("API Key", text: Binding(
                     get: { settings.llmAPIKey },
                     set: { settings.llmAPIKey = $0 }
                 ))
+                Button(isLoadingModels ? "正在识别模型…" : "识别可用模型") { loadModels(settings) }
+                    .disabled(isLoadingModels || settings.llmAPIKey.isEmpty)
+                if let modelLoadError { Text(modelLoadError).font(.caption).foregroundStyle(AppTheme.destructive) }
             }
         }
         .formStyle(.grouped)
         .padding(20)
+    }
+
+    private func loadModels(_ settings: AppSettings) {
+        isLoadingModels = true; modelLoadError = nil
+        Task {
+            do {
+                availableModels = try await ModelCatalog.fetch(baseURL: settings.llmBaseURL, apiKey: settings.llmAPIKey)
+                if availableModels.contains("deepseek-chat") { settings.llmModel = "deepseek-chat" }
+            } catch { modelLoadError = error.localizedDescription }
+            isLoadingModels = false
+        }
     }
 }

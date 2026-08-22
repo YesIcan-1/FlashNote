@@ -139,13 +139,19 @@ public struct MinutesGenerator {
         for section in found {
             byTitle[section.title] = section.body
         }
-        return expected.map { MinutesSection(title: $0, body: byTitle[$0] ?? "") }
+        let sections = expected.map { MinutesSection(title: $0, body: byTitle[$0] ?? "") }
+        // 兼容常见兼容模型未遵守 Markdown 标题格式的情况：保留完整内容，不能只留下空模板。
+        if sections.allSatisfy({ $0.body.isEmpty }) {
+            return [MinutesSection(title: "AI 生成结果", body: output.trimmingCharacters(in: .whitespacesAndNewlines))]
+        }
+        return sections
     }
 
     /// 把 Markdown 标题行规范化为小节标题：容忍 "##标题"、"### 标题"、尾部冒号（：/:）；非标题行返回 nil。
     static func headerTitle(from line: String) -> String? {
-        guard line.hasPrefix("#") else { return nil }
-        var rest = line
+        let unbolded = line.trimmingCharacters(in: CharacterSet(charactersIn: "*"))
+        guard unbolded.hasPrefix("#") else { return nil }
+        var rest = unbolded
         while rest.hasPrefix("#") { rest.removeFirst() }
         let title = rest.trimmingCharacters(in: .whitespaces)
         guard !title.isEmpty else { return nil }
