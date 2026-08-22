@@ -99,6 +99,6 @@ struct CB08DeviceTests {
 }
 
 /// 测试辅助：构造 TYPE/CMD 帧数据。
-private func frameData(type: UInt8, cmd: UInt8, params: Data) -> Data {
+func frameData(type: UInt8, cmd: UInt8, params: Data) -> Data {
     CB08Frame.build(seq: 0, data: CB08Command.data(type: type, cmd: cmd, params: params))
 }
