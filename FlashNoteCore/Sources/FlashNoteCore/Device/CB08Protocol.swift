@@ -88,17 +88,19 @@ public struct CB08FileEntry: Equatable {
         self.name = name
     }
 
-    /// 下载候选名：优先 base.wav，其次 base.opus，最后原始截断名。
+    /// 下载候选名（参考官方实现）：先去尾部 "."（列表截断扩展名所致），
+    /// 去掉已含扩展名，再拼 base.wav / base.opus / 原始名。
     public var candidateNames: [String] {
-        var names: [String] = []
-        let trimmed = name.replacingOccurrences(of: "\u{0000}", with: "")
-        for ext in [".wav", ".opus"] {
-            if !trimmed.hasSuffix(ext) {
-                names.append(trimmed + ext)
+        var base = name.replacingOccurrences(of: "\u{0000}", with: "")
+        while base.hasSuffix(".") { base.removeLast() }
+        for ext in [".wav", ".opus", ".mp3"] {
+            if base.lowercased().hasSuffix(ext) {
+                base.removeLast(ext.count)
+                break
             }
         }
-        names.append(trimmed)
-        return names
+        let raw = name.replacingOccurrences(of: "\u{0000}", with: "")
+        return [base + ".wav", base + ".opus", raw]
     }
 }
 

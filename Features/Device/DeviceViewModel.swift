@@ -106,6 +106,10 @@ final class DeviceViewModel {
         central.onPoweredOn = { [weak self] powered in
             self?.statusText = powered ? "蓝牙可用，请扫描并连接设备" : "蓝牙不可用"
         }
+        central.onAutoReconnect = { [weak self] in
+            self?.phase = .connecting
+            self?.statusText = "自动重连上次设备…"
+        }
         central.onPeripheralConnected = { [weak self] in
             guard let self else { return }
             let device = CB08Device(transport: self.central, seqGenerator: { self.nextSeq() })

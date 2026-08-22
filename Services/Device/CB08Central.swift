@@ -1,6 +1,9 @@
 import Foundation
+import os
 import CoreBluetooth
 import FlashNoteCore
+
+let deviceLogger = Logger(subsystem: "com.flashnote.mac", category: "device")
 
 /// 扫描/连接 QS668（Service 0xAE20），封装为 BLETransport。
 /// 单例：连接状态在 tab 切换/视图重建后保持。
@@ -12,6 +15,11 @@ final class CB08Central: NSObject, BLETransport {
     var onPeripheralDisconnected: (() -> Void)?
     var onDiscovered: ((CBPeripheral) -> Void)?
     var onError: ((String) -> Void)?
+    /// 自动重连已记住的设备。
+    var onAutoReconnect: (() -> Void)?
+
+    private static let rememberedKey = "rememberedDeviceID"
+    private(set) var isAutoReconnecting = false
 
     private(set) var isConnected = false
 
@@ -39,7 +47,17 @@ final class CB08Central: NSObject, BLETransport {
         self.peripheral = peripheral
         peripheral.delegate = self
         manager.stopScan()
+        UserDefaults.standard.set(peripheral.identifier.uuidString, forKey: Self.rememberedKey)
         manager.connect(peripheral, options: nil)
+    }
+
+    func clearRememberedDevice() {
+        UserDefaults.standard.removeObject(forKey: Self.rememberedKey)
+    }
+
+    private func rememberedDeviceID() -> UUID? {
+        guard let s = UserDefaults.standard.string(forKey: Self.rememberedKey) else { return nil }
+        return UUID(uuidString: s)
     }
 
     func disconnect() {
@@ -52,6 +70,7 @@ final class CB08Central: NSObject, BLETransport {
     // MARK: BLETransport
     func write(_ data: Data) {
         guard let peripheral, let writeChar else { return }
+        deviceLogger.info("TX \(data.map { String(format: "%02x", $0) }.joined(), privacy: .public)")
         peripheral.writeValue(data, for: writeChar, type: .withoutResponse)
     }
 
@@ -63,6 +82,14 @@ final class CB08Central: NSObject, BLETransport {
 extension CB08Central: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         onPoweredOn?(central.state == .poweredOn)
+        // 蓝牙就绪且记住了设备 → 自动重连（无需重新扫描）
+        guard central.state == .poweredOn, !isConnected, let id = rememberedDeviceID() else { return }
+        let peripherals = central.retrievePeripherals(withIdentifiers: [id])
+        if let peripheral = peripherals.first {
+            isAutoReconnecting = true
+            connect(peripheral)
+            onAutoReconnect?()
+        }
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
@@ -70,6 +97,7 @@ extension CB08Central: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        isAutoReconnecting = false
         peripheral.discoverServices([Self.serviceUUID])
     }
 
@@ -104,6 +132,7 @@ extension CB08Central: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard characteristic.uuid == Self.notifyUUID, let value = characteristic.value else { return }
+        deviceLogger.info("RX \(value.map { String(format: "%02x", $0) }.joined(), privacy: .public)")
         onNotify?(value)
     }
 }
