@@ -14,6 +14,8 @@ struct RootView: View {
                 Label("所有录音", systemImage: AppIcons.mic)
                     .fontWeight(.semibold)
                     .tag(UUID?.none)
+                Label("录音笔", systemImage: AppIcons.settings)
+                    .tag(UUID?.none)
                 Label("工作", systemImage: AppIcons.folder)
                     .foregroundStyle(.secondary)
                     .disabled(true)
@@ -68,6 +70,8 @@ struct RootView: View {
             .tabItem { Label("录音", systemImage: AppIcons.mic) }
             ContentUnavailableView("文件夹将在 M4 实现", systemImage: AppIcons.folder)
                 .tabItem { Label("文件夹", systemImage: AppIcons.folder) }
+            DevicePanelView()
+                .tabItem { Label("录音笔", systemImage: AppIcons.settings) }
             SettingsView()
                 .tabItem { Label("设置", systemImage: AppIcons.settings) }
         }
