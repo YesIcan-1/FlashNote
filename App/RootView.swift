@@ -1,21 +1,28 @@
 import SwiftUI
 import FlashNoteCore
 
+/// 侧边栏固定项（与录音 UUID 区分，用于路由内容区）。
+enum SidebarItem: Hashable {
+    case recordings
+    case device
+}
+
 struct RootView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var recordings: [Recording] = []
     @State private var selection: UUID?
     @State private var showingSettings = false
+    @State private var sidebarItem: SidebarItem = .recordings
 
     var body: some View {
 #if os(macOS)
         NavigationSplitView {
-            List(selection: $selection) {
+            List(selection: $sidebarItem) {
                 Label("所有录音", systemImage: AppIcons.mic)
                     .fontWeight(.semibold)
-                    .tag(UUID?.none)
+                    .tag(SidebarItem.recordings)
                 Label("录音笔", systemImage: AppIcons.settings)
-                    .tag(UUID?.none)
+                    .tag(SidebarItem.device)
                 Label("工作", systemImage: AppIcons.folder)
                     .foregroundStyle(.secondary)
                     .disabled(true)
@@ -42,7 +49,12 @@ struct RootView: View {
                 }
             }
         } content: {
-            RecordingListView(selectedID: $selection)
+            switch sidebarItem {
+            case .recordings:
+                RecordingListView(selectedID: $selection)
+            case .device:
+                DevicePanelView()
+            }
         } detail: {
             if let selection,
                let recording = recordings.first(where: { $0.id == selection }) {
@@ -54,6 +66,7 @@ struct RootView: View {
         }
         .frame(minWidth: 1000, minHeight: 620)
         .onChange(of: selection) { _, _ in reloadRecordings() }
+        .onChange(of: sidebarItem) { _, _ in reloadRecordings() }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
