@@ -25,7 +25,9 @@ final class DeviceTranscriptionService {
 
     /// 下载设备文件并转写保存。
     func downloadAndTranscribe(file: CB08FileEntry, title: String) async throws -> Transcript {
-        expectedSize = file.size
+        // WAV 体积估算：时长(秒) × 32000 B/s + 44 头（参考实现）
+        expectedSize = UInt32(max(1, Int(file.time) * 32000 + 44))
+        
         let (data, actualName) = try await download(file: file)
 
         let id = UUID()
@@ -65,7 +67,6 @@ final class DeviceTranscriptionService {
     }
 
     private var expectedSize: UInt32 = 0
-
     private func downloadOne(name: String) async throws -> (Data, String) {
         try await withCheckedThrowingContinuation { cont in
             var buffer = Data()

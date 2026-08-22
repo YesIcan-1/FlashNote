@@ -70,7 +70,7 @@ final class CB08Central: NSObject, BLETransport {
     // MARK: BLETransport
     func write(_ data: Data) {
         guard let peripheral, let writeChar else { return }
-        deviceLogger.info("TX \(data.map { String(format: "%02x", $0) }.joined(), privacy: .public)")
+
         peripheral.writeValue(data, for: writeChar, type: .withoutResponse)
     }
 
@@ -132,7 +132,7 @@ extension CB08Central: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard characteristic.uuid == Self.notifyUUID, let value = characteristic.value else { return }
-        deviceLogger.info("RX \(value.map { String(format: "%02x", $0) }.joined(), privacy: .public)")
+
         onNotify?(value)
     }
 }
