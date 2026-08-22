@@ -88,25 +88,28 @@ final class DeviceViewModel {
             }
             self.statusText = "发现 \(self.discovered.count) 台设备，点击连接"
         }
-        central.onConnected = { [weak self] ok in
+        central.onPoweredOn = { [weak self] powered in
+            self?.statusText = powered ? "蓝牙可用，请扫描并连接设备" : "蓝牙不可用"
+        }
+        central.onPeripheralConnected = { [weak self] in
             guard let self else { return }
-            if ok {
-                let device = CB08Device(transport: self.central, seqGenerator: { self.nextSeq() })
-                self.device = device
-                device.onBattery = { self.battery = $0 }
-                device.onFileList = { self.files = $0 }
-                let settings = AppSettings(storeDirectory: AppEnvironment.defaultStoreDirectory())
-                self.transcription = DeviceTranscriptionService(
-                    device: device,
-                    engine: FileTranscriptionEngineFactory.make(settings: settings),
-                    store: self.store
-                )
-                self.phase = .connected
-                self.statusText = "已连接，读取设备信息…"
-                self.refreshInfo()
-            } else {
-                self.phase = .error("蓝牙未连接或已断开")
-            }
+            let device = CB08Device(transport: self.central, seqGenerator: { self.nextSeq() })
+            self.device = device
+            device.onBattery = { self.battery = $0 }
+            device.onFileList = { self.files = $0 }
+            let settings = AppSettings(storeDirectory: AppEnvironment.defaultStoreDirectory())
+            self.transcription = DeviceTranscriptionService(
+                device: device,
+                engine: FileTranscriptionEngineFactory.make(settings: settings),
+                store: self.store
+            )
+            self.phase = .connected
+            self.statusText = "已连接，读取设备信息…"
+            self.refreshInfo()
+        }
+        central.onPeripheralDisconnected = { [weak self] in
+            self?.phase = .idle
+            self?.statusText = "设备已断开"
         }
         central.onError = { [weak self] msg in
             self?.phase = .error(msg)

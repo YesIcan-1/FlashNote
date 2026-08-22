@@ -5,7 +5,11 @@ import FlashNoteCore
 /// 扫描/连接 QS668（Service 0xAE20），封装为 BLETransport。
 /// CoreBluetooth 细节在此层；高层逻辑在 CB08Device（可测）。
 final class CB08Central: NSObject, BLETransport {
-    var onConnected: ((Bool) -> Void)?
+    /// 蓝牙模块是否可用（poweredOn）。
+    var onPoweredOn: ((Bool) -> Void)?
+    /// 已连接外设 / 已断开。
+    var onPeripheralConnected: (() -> Void)?
+    var onPeripheralDisconnected: (() -> Void)?
     var onDiscovered: ((CBPeripheral) -> Void)?
     var onError: ((String) -> Void)?
 
@@ -52,7 +56,7 @@ final class CB08Central: NSObject, BLETransport {
 
 extension CB08Central: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn { onConnected?(true) } else { onConnected?(false) }
+        onPoweredOn?(central.state == .poweredOn)
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
@@ -61,6 +65,7 @@ extension CB08Central: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         peripheral.discoverServices([Self.serviceUUID])
+        onPeripheralConnected?()
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -68,7 +73,7 @@ extension CB08Central: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        onConnected?(error == nil)
+        onPeripheralDisconnected?()
     }
 }
 
