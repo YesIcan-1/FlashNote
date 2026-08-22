@@ -52,6 +52,14 @@ struct CB08DeviceTests {
         #expect(battery == 90)
     }
 
+    @Test func handleBatteryResponseFromEventChannel() {
+        let (device, transport) = makeDevice()
+        var battery: Int?
+        device.onBattery = { battery = $0 }
+        transport.onEventNotify?(frameData(type: 0, cmd: 4, params: Data([76])))
+        #expect(battery == 76)
+    }
+
     @Test func fileListAccumulatesAcrossFrames() {
         let (device, transport) = makeDevice()
         device.requestFileList()

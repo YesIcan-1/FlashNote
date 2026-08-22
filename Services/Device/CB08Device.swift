@@ -77,9 +77,14 @@ final class CB08Device {
     }
 
     private func handleEventNotification(_ data: Data) {
-        for frame in eventParser.feed(data) where frame.type == 3 {
-            if frame.cmd == 20, let state = frame.params.first {
-                onRecordState?(state)
+        for frame in eventParser.feed(data) {
+            switch frame.type {
+            case 0:
+                if frame.cmd == 4, let value = frame.params.first { onBattery?(Int(value)) }
+                else if frame.cmd == 11 { onFirmware?(Self.trimmedText(frame.params)) }
+            case 3:
+                if frame.cmd == 20, let state = frame.params.first { onRecordState?(state) }
+            default: break
             }
         }
     }

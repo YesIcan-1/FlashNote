@@ -7,6 +7,7 @@ enum SidebarItem: Hashable {
     case recordings
     case files
     case device
+    case settings
 }
 
 private enum MobileTab: Hashable {
@@ -38,6 +39,8 @@ struct RootView: View {
                     .tag(SidebarItem.files)
                 Label("录音笔", systemImage: AppIcons.device)
                     .tag(SidebarItem.device)
+                Label("设置", systemImage: AppIcons.settings)
+                    .tag(SidebarItem.settings)
             }
             .navigationTitle("FlashNote")
             .listStyle(.sidebar)
@@ -67,6 +70,8 @@ struct RootView: View {
                 FileCenterView()
             case .device:
                 DevicePanelView()
+            case .settings:
+                SettingsView()
             }
         }
         .frame(minWidth: 1000, minHeight: 620)

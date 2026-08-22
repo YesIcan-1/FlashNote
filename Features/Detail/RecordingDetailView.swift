@@ -6,6 +6,9 @@ struct RecordingDetailView: View {
     let recording: Recording
     @Environment(\.appEnvironment) private var environment
     @State private var transcript: Transcript?
+    @State private var minutes: Minutes?
+    @State private var isGeneratingMinutes = false
+    @State private var minutesError: String?
     @State private var selectedTab: Tab = .transcript
     @State private var player = AudioPlayer()
 
@@ -41,6 +44,7 @@ struct RecordingDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             loadTranscript()
+            loadMinutes()
             if selectedTab == .player { loadAudio() }
         }
         .onChange(of: selectedTab) { _, newValue in
@@ -75,11 +79,41 @@ struct RecordingDetailView: View {
                 ContentUnavailableView("暂无转写", systemImage: AppIcons.document)
             }
         case .minutes:
-            ContentUnavailableView("AI 纪要将在 M3 实现", systemImage: AppIcons.sparkle)
+            minutesView
         case .player:
             playerView
         }
     }
+
+    @ViewBuilder
+    private var minutesView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("纪要风格", selection: $selectedTemplateID) {
+                ForEach(MinutesTemplate.builtins) { Text($0.name).tag($0.id) }
+            }
+            .pickerStyle(.segmented)
+            if let minutes {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(minutes.sections, id: \.title) { section in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(section.title).font(.headline)
+                                Text(section.body.isEmpty ? "未生成内容" : section.body)
+                            }
+                        }
+                    }
+                }
+            } else {
+                ContentUnavailableView("尚未生成 AI 纪要", systemImage: AppIcons.sparkle,
+                                       description: Text("选择风格后生成，可随时重新生成。"))
+            }
+            if let minutesError { Text(minutesError).font(.caption).foregroundStyle(AppTheme.destructive) }
+            Button(isGeneratingMinutes ? "生成中…" : "生成 AI 纪要") { generateMinutes() }
+                .buttonStyle(.borderedProminent).disabled(isGeneratingMinutes || transcript == nil)
+        }
+    }
+
+    @State private var selectedTemplateID = MinutesTemplate.builtins[0].id
 
     @ViewBuilder
     private var playerView: some View {
@@ -103,6 +137,32 @@ struct RecordingDetailView: View {
 
     private func loadTranscript() {
         transcript = try? environment?.store.fetchTranscript(recordingID: recording.id)
+    }
+
+    private func loadMinutes() {
+        minutes = try? environment?.store.fetchMinutes(recordingID: recording.id).last
+    }
+
+    private func generateMinutes() {
+        guard let transcript, let store = environment?.store else { return }
+        guard let template = MinutesTemplate.builtins.first(where: { $0.id == selectedTemplateID }) else { return }
+        let settings = AppSettings(storeDirectory: AppEnvironment.defaultStoreDirectory())
+        guard !settings.llmAPIKey.isEmpty, let baseURL = URL(string: settings.llmBaseURL) else {
+            minutesError = "请先在设置中填写 API 地址、模型和 API Key。"
+            return
+        }
+        isGeneratingMinutes = true; minutesError = nil
+        Task {
+            do {
+                let client = OpenAICompatibleClient(configuration: .init(baseURL: baseURL, apiKey: settings.llmAPIKey, model: settings.llmModel))
+                let generated = try await MinutesGenerator(client: client).generate(transcript: transcript.fullText, template: template, recordingID: recording.id)
+                try store.upsertMinutes(generated)
+                minutes = generated
+            } catch {
+                minutesError = "生成失败：\(error.localizedDescription)"
+            }
+            isGeneratingMinutes = false
+        }
     }
 
     private func timestampText(_ t: TimeInterval) -> String {
