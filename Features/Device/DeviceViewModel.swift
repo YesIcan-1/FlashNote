@@ -27,8 +27,8 @@ final class DeviceViewModel {
     private var transcription: DeviceTranscriptionService?
     private var seq: UInt8 = 0
 
-    init(central: CB08Central = CB08Central(), store: RecordingStore) {
-        self.central = central
+    init(store: RecordingStore) {
+        self.central = CB08Central.shared
         self.store = store
         wireCentral()
     }
@@ -50,6 +50,21 @@ final class DeviceViewModel {
         device = nil
         transcription = nil
         phase = .idle
+        files = []
+        battery = nil
+        firmware = nil
+        statusText = "已断开，可重新扫描连接"
+    }
+
+    /// 视图出现时重新绑定单例中央的回调并恢复连接态。
+    func onAppear() {
+        wireCentral()
+        if central.isConnected {
+            phase = .connected
+            statusText = "已连接"
+        } else {
+            statusText = "蓝牙可用，请扫描并连接设备"
+        }
     }
 
     func refreshInfo() {

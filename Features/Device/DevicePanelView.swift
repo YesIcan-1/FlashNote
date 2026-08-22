@@ -20,6 +20,7 @@ struct DevicePanelView: View {
         .task {
             if let env = environment, viewModel == nil {
                 viewModel = DeviceViewModel(store: env.store)
+                viewModel?.onAppear()
             }
         }
     }
@@ -85,6 +86,9 @@ struct DevicePanelView: View {
             StatBox(label: "文件", value: "\(vm.files.count)")
             Button("刷新") { vm.refreshInfo() }
                 .buttonStyle(.bordered)
+            Button("断开连接") { vm.disconnect() }
+                .buttonStyle(.bordered)
+                .tint(AppTheme.destructive)
         }
         HStack(spacing: 12) {
             Button("开始录音") { vm.recordStart() }
