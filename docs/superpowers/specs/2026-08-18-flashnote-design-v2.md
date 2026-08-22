@@ -47,8 +47,8 @@ FlashNote 是 **macOS + iOS 的 AI 录音生产力平台**：通过蓝牙（BLE�
    CB08Central(scan/connect) · CB08Protocol(帧/CRC/SEQ) · CB08Device(设备信息/列表/下载/实时/录音控制)
         │ 音频文件(WAV/OPUS) · 实时 OPUS 码流(40B/包)
 ② 音频/转写层
-   OpusDecoder(40B包→PCM) · AppleSpeechEngine(实时,含硬件流) · CloudWhisperEngine(文件) ·
-   WhisperKitEngine(本地,顺延) · 多语言选择
+   OpusDecoder(40B包→PCM) · QuranASRStreamEngine(流式,默认,用户填阿里云 AppKey) ·
+   AppleSpeechEngine(实时,离线兜底) · CloudWhisperEngine(文件) · WhisperKitEngine(本地,顺延) · 多语言选择
         │ 转写全文（分句 + 时间戳 + 说话人占位）
 ③ AI 产出工厂（自接 OpenAI 兼容模型）
    SummaryGenerator(摘要/纪要) · MindMapGenerator · RAGKnowledgeBase · ReportGenerator ·
@@ -65,8 +65,11 @@ FlashNote 是 **macOS + iOS 的 AI 录音生产力平台**：通过蓝牙（BLE�
 
 - `CB08Device`：`connect/disconnect`、`battery()`、`fileList()`、`download(file:progress:)`、`startRealtimeStream(onAudio:onState:)`、`recordStart/pause/resume/save`、`setGain`。
 - `OpusDecoder`：`decode(packets: Data) -> [AVAudioPCMBuffer]`。
+- `StreamASREngine`（可插拔实时转写）：协议 `onSegment(_:)`；实现 `AlibabaQwenASR`（默认，用户填 AppKey，流式）、`AppleSpeechEngine`（离线兜底）。
 - `AIOutputFactory`：`func generate(kind: OutputKind, transcript: Transcript, options: OutputOptions) async throws -> AIOutput`，`OutputKind = summary|mindmap|qa|report|deepResearch|podcast|translation`。
 - `RAGKnowledgeBase`：embedding 入库 + 检索 + 生成回答。
+
+> **实时转写决策**：默认 **阿里云 Qwen-ASR-Realtime**（FunASR 同源，中文最贴近参考 SensVoiceSmall；用户填 AppKey）；Apple Speech 作离线兜底；整段（导入）用 Whisper API / WhisperKit；支持多语言。
 
 ## 4. 数据模型（扩展核心层）
 
