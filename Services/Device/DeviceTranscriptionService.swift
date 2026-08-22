@@ -36,16 +36,7 @@ final class DeviceTranscriptionService {
         progress = 0
         onProgress?(0, "开始下载…")
         
-        let (data, actualName) = try await download(file: file)
-
-        let audioData: Data
-        if actualName.lowercased().hasSuffix(".opus") {
-            statusText = "正在解码为 WAV…"
-            onProgress?(1, statusText)
-            audioData = try CB08OpusFileDecoder.decodeToWAV(data)
-        } else {
-            audioData = data
-        }
+        let (audioData, actualName) = try await download(file: file)
 
         let id = UUID()
         let audioDir = storeDirectory.appendingPathComponent("audio", isDirectory: true)
@@ -74,7 +65,19 @@ final class DeviceTranscriptionService {
         for (index, name) in candidates.enumerated() {
             do {
                 progress = 0
-                return try await downloadOne(name: name)
+                let (data, actualName) = try await downloadOne(name: name)
+                if actualName.lowercased().hasSuffix(".opus") {
+                    statusText = "正在解码为 WAV…"
+                    onProgress?(1, statusText)
+                    do {
+                        return (try CB08OpusFileDecoder.decodeToWAV(data), actualName)
+                    } catch {
+                        // OPUS 损坏时保留可用性：继续尝试同名 WAV。
+                        lastError = error
+                        continue
+                    }
+                }
+                return (data, actualName)
             } catch let error as DeviceError {
                 lastError = error
                 if error != .downloadCode(1) { throw error } // code=1 才换候选名

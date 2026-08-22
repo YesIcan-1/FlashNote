@@ -67,6 +67,21 @@ struct DeviceTranscriptionServiceTests {
         #expect(try store.fetchRecordings().count == 1)
     }
 
+    @Test func corruptOpusFallsBackToWAVBeforeTranscription() async throws {
+        let (service, transport, store) = makeService()
+        let task = Task { try await service.downloadAndTranscribe(file: .init(time: 1, size: 40, name: "note"), title: "note") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        transport.onNotify?(frameData(type: 2, cmd: 3, params: Data("note.opus".utf8)))
+        transport.onNotify?(frameData(type: 2, cmd: 4, params: Data([1, 2])))
+        transport.onNotify?(frameData(type: 2, cmd: 5, params: Data([0])))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        transport.onNotify?(frameData(type: 2, cmd: 3, params: Data("note.wav".utf8)))
+        transport.onNotify?(frameData(type: 2, cmd: 4, params: Data([1, 2])))
+        transport.onNotify?(frameData(type: 2, cmd: 5, params: Data([0])))
+        _ = try await task.value
+        #expect(try store.fetchRecordings().count == 1)
+    }
+
     @Test func downloadProgressUsesCompressedFileSize() async throws {
         let (service, transport, _) = makeService()
         let file = CB08FileEntry(time: 173, size: 64, name: "note")
