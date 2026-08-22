@@ -58,17 +58,18 @@ struct SettingsView: View {
                     get: { settings.llmBaseURL },
                     set: { settings.llmBaseURL = $0 }
                 ))
-                TextField("模型", text: Binding(
-                    get: { settings.llmModel },
-                    set: { settings.llmModel = $0 }
-                ))
                 if !availableModels.isEmpty {
-                    Picker("已识别模型", selection: Binding(
+                    Picker("模型", selection: Binding(
                         get: { settings.llmModel },
                         set: { settings.llmModel = $0 }
                     )) {
                         ForEach(availableModels, id: \.self) { Text($0).tag($0) }
                     }
+                } else {
+                    TextField("模型", text: Binding(
+                        get: { settings.llmModel },
+                        set: { settings.llmModel = $0 }
+                    ))
                 }
                 SecureField("API Key", text: Binding(
                     get: { settings.llmAPIKey },
@@ -77,6 +78,14 @@ struct SettingsView: View {
                 Button(isLoadingModels ? "正在识别模型…" : "识别可用模型") { loadModels(settings) }
                     .disabled(isLoadingModels || settings.llmAPIKey.isEmpty)
                 if let modelLoadError { Text(modelLoadError).font(.caption).foregroundStyle(AppTheme.destructive) }
+            }
+            Section("Qwen3-ASR（百炼语音转写）") {
+                SecureField("DashScope API Key", text: Binding(get: { settings.qwenASRAPIKey }, set: { settings.qwenASRAPIKey = $0 }))
+                TextField("Workspace ID（长文件转写需要）", text: Binding(get: { settings.qwenASRWorkspaceID }, set: { settings.qwenASRWorkspaceID = $0 }))
+                TextField("文件模型", text: Binding(get: { settings.qwenASRFileModel }, set: { settings.qwenASRFileModel = $0 }))
+                TextField("实时模型", text: Binding(get: { settings.qwenASRRealtimeModel }, set: { settings.qwenASRRealtimeModel = $0 }))
+                Text("用于设备文件全文转写与设备实时转写；DeepSeek 仅生成纪要。")
+                    .font(.caption).foregroundStyle(AppTheme.secondaryText)
             }
         }
         .formStyle(.grouped)

@@ -89,6 +89,24 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: "llmAPIKey") }
     }
 
+    /// 百炼 Qwen3-ASR 与 DeepSeek 纪要完全独立的配置。
+    var qwenASRAPIKey: String {
+        get { defaults.string(forKey: "qwenASRAPIKey") ?? "" }
+        set { defaults.set(newValue, forKey: "qwenASRAPIKey") }
+    }
+    var qwenASRWorkspaceID: String {
+        get { defaults.string(forKey: "qwenASRWorkspaceID") ?? "" }
+        set { defaults.set(newValue, forKey: "qwenASRWorkspaceID") }
+    }
+    var qwenASRFileModel: String {
+        get { defaults.string(forKey: "qwenASRFileModel") ?? "qwen3-asr-flash-filetrans" }
+        set { defaults.set(newValue, forKey: "qwenASRFileModel") }
+    }
+    var qwenASRRealtimeModel: String {
+        get { defaults.string(forKey: "qwenASRRealtimeModel") ?? "qwen3-asr-realtime" }
+        set { defaults.set(newValue, forKey: "qwenASRRealtimeModel") }
+    }
+
     init(storeDirectory: URL, keychain: APIKeyStoring = KeychainAPIKeyStore(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
         self.defaults = defaults
