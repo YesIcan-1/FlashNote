@@ -25,6 +25,7 @@ final class DeviceTranscriptionService {
 
     /// 下载设备文件并转写保存。
     func downloadAndTranscribe(file: CB08FileEntry, title: String) async throws -> Transcript {
+        expectedSize = file.size
         let (data, actualName) = try await download(file: file)
 
         let id = UUID()
@@ -63,23 +64,56 @@ final class DeviceTranscriptionService {
         throw lastError
     }
 
+    private var expectedSize: UInt32 = 0
+
     private func downloadOne(name: String) async throws -> (Data, String) {
         try await withCheckedThrowingContinuation { cont in
             var buffer = Data()
+            var finished = false
+
+            func resumeIfNeeded(_ result: Result<(Data, String), Error>) {
+                guard !finished else { return }
+                finished = true
+                cont.resume(with: result)
+            }
+
+            // 空闲超时兜底：收到数据后若 6s 无新数据（且无结束帧），视为完成
+            var idleTask: Task<Void, Never>?
+            func restartIdle() {
+                idleTask?.cancel()
+                idleTask = Task {
+                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    if !buffer.isEmpty {
+                        resumeIfNeeded(.success((buffer, name)))
+                    } else {
+                        resumeIfNeeded(.failure(DeviceError.downloadCode(1)))
+                    }
+                }
+            }
+
             device.onDownloadData = { [weak self] d in
                 buffer.append(d)
-                self?.statusText = "下载中…"
+                if let self, self.expectedSize > 0 {
+                    self.progress = min(1, Double(buffer.count) / Double(self.expectedSize))
+                }
+                self?.statusText = "下载中 \(buffer.count) 字节"
+                restartIdle()
             }
             device.onDownloadComplete = { [weak self] data, actualName in
+                idleTask?.cancel()
                 self?.statusText = "下载完成"
-                cont.resume(returning: (data, actualName))
+                self?.progress = 1
+                resumeIfNeeded(.success((data, actualName)))
             }
             device.onDownloadCode = { code in
-                if code != 0 {
-                    cont.resume(throwing: DeviceError.downloadCode(code))
+                idleTask?.cancel()
+                if code != 0 && !finished {
+                    resumeIfNeeded(.failure(DeviceError.downloadCode(code)))
                 }
             }
             device.requestImport(filename: name)
+            restartIdle()
         }
     }
 }

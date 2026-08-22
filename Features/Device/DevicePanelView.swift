@@ -110,21 +110,37 @@ struct DevicePanelView: View {
                     .foregroundStyle(AppTheme.secondaryText)
             } else {
                 ForEach(Array(vm.files.enumerated()), id: \.offset) { _, file in
-                    HStack {
-                        Text(file.name)
-                            .lineLimit(1)
-                        Spacer()
-                        Text("\(file.size) B")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(file.candidateNames.first ?? file.name)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(fileSizeText(file.size))
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.secondaryText)
+                        }
                         Button("下载转写") { vm.downloadAndTranscribe(file: file) }
                             .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        if vm.progress > 0 && vm.progress < 1 {
+                            ProgressView(value: vm.progress)
+                        }
                     }
                 }
                 .font(.callout)
             }
         }
     }
+}
+
+/// 文件大小格式化：≥10MB 显示 MB，否则 KB。
+private func fileSizeText(_ bytes: UInt32) -> String {
+    if bytes >= 10_485_760 {
+        return String(format: "%.1f MB", Double(bytes) / 1_048_576)
+    } else if bytes >= 1024 {
+        return String(format: "%.0f KB", Double(bytes) / 1024)
+    }
+    return "\(bytes) B"
 }
 
 /// 设备信息统计卡。
