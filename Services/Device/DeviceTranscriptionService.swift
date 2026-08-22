@@ -20,7 +20,7 @@ final class DeviceTranscriptionService {
     private(set) var progress: Double = 0
     private(set) var statusText = ""
 
-    init(device: CB08Device, engine: FileTranscriptionEngine, store: RecordingStore, storeDirectory: URL = AppEnvironment.defaultStoreDirectory(), idleTimeoutNanoseconds: UInt64 = 6_000_000_000) {
+    init(device: CB08Device, engine: FileTranscriptionEngine, store: RecordingStore, storeDirectory: URL = AppEnvironment.defaultStoreDirectory(), idleTimeoutNanoseconds: UInt64 = 12_000_000_000) {
         self.device = device
         self.engine = engine
         self.store = store
@@ -58,7 +58,7 @@ final class DeviceTranscriptionService {
         return transcript
     }
 
-    /// 异步下载（候选名回退：base.opus → base.wav → 原始名）。
+    /// 异步下载（按真机协议优先请求标准 WAV，再回退 OPUS 和原始名）。
     private func download(file: CB08FileEntry) async throws -> (Data, String) {
         let candidates = preferredDownloadCandidates(for: file)
         var lastError: Error = DeviceError.downloadCode(0)
@@ -87,7 +87,7 @@ final class DeviceTranscriptionService {
         throw lastError
     }
 
-    /// 优先获取设备中的压缩 OPUS 文件；无法获取时再请求 WAV 和原始截断名。
+    /// 设备可在导出时转为 WAV；优先该格式以避免额外解码与转写兼容问题。
     private func preferredDownloadCandidates(for file: CB08FileEntry) -> [String] {
         let candidates = file.candidateNames
         let opus = candidates.filter { $0.lowercased().hasSuffix(".opus") }
@@ -95,7 +95,7 @@ final class DeviceTranscriptionService {
         let raw = candidates.filter { name in
             !name.lowercased().hasSuffix(".opus") && !name.lowercased().hasSuffix(".wav")
         }
-        return Array(NSOrderedSet(array: opus + wav + raw)) as? [String] ?? candidates
+        return Array(NSOrderedSet(array: wav + opus + raw)) as? [String] ?? candidates
     }
 
     private var expectedSize: UInt32 = 0
