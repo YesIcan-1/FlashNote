@@ -61,3 +61,16 @@ struct CB08ProtocolTests {
         #expect(entries[0].candidateNames == ["note20260710-162938.wav", "note20260710-162938.opus", "note20260710-162938"])
     }
 }
+
+    @Test func decodeRealDeviceFileList() {
+        let frame = Data([0x5a, 0x02, 0x09, 0x97, 0x22, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xad, 0x00, 0x05, 0x4b, 0x78, 0x6e, 0x6f, 0x74, 0x65, 0x32, 0x30, 0x32, 0x36, 0x30, 0x38, 0x32, 0x32, 0x2d, 0x31, 0x39, 0x30, 0x32, 0x34, 0x36, 0x2e])
+        var parser = CB08FrameParser()
+        let frames = parser.feed(frame)
+        #expect(frames.count == 1)
+        let entry = CB08FileList.decode(frames[0].params)
+        print("PARAMSHEX=\(frames[0].params.map { String(format: "%02x", $0) }.joined()) COUNT=\(frames[0].params.count)")
+        #expect(entry.count == 1)
+        #expect(entry[0].name == "note20260822-190246.")
+        #expect(entry[0].size == UInt32(347000))
+        #expect(entry[0].candidateNames.first == "note20260822-190246.wav")
+    }

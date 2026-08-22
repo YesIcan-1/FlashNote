@@ -19,7 +19,7 @@ public struct CB08Frame: Equatable {
     public let data: Data
     public var type: UInt8 { data.count >= 1 ? data[data.startIndex] : 0 }
     public var cmd: UInt8? { data.count >= 2 ? data[data.startIndex + 1] : nil }
-    public var params: Data { data.count > 2 ? data.dropFirst(2) : Data() }
+    public var params: Data { data.count > 2 ? Data(data.dropFirst(2)) : Data() }
 
     /// 构造完整帧：MAGIC(0x5A) + SEQ + CRC(LE) + LEN(LE) + DATA。
     /// CRC 输入 = LEN 原始 2 字节 + DATA。
