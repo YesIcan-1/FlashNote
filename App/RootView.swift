@@ -44,6 +44,8 @@ struct RootView: View {
             }
             .navigationTitle("FlashNote")
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.pageBackground)
         } detail: {
             switch sidebarItem {
             case .workbench:

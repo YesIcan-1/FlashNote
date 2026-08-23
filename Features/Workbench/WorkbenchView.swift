@@ -168,7 +168,11 @@ struct WorkbenchView: View {
                                        description: Text("创建录音、导入音视频，或从录音笔同步文件。"))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 28)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(AppTheme.border, lineWidth: 1)
+                    }
             } else {
                 Card {
                     VStack(spacing: 0) {
