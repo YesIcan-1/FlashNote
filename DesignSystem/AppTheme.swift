@@ -8,7 +8,7 @@ enum AppTheme {
     static let pageBackground = Color.white
     static let cardBackground = Color.white
     static let elevatedSurface = Color.white
-    static let background = Color.black.opacity(0.045)
+    static let background = Color.white
     static let border = Color.black.opacity(0.075)
     static let primaryText = Color(red: 0.10, green: 0.11, blue: 0.13)
     static let secondaryText = Color(red: 0.38, green: 0.40, blue: 0.44)

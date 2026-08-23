@@ -19,6 +19,8 @@ struct RecordingListView: View {
             if recordings.isEmpty {
                 ContentUnavailableView("还没有录音", systemImage: AppIcons.mic,
                                        description: Text("点击 + 录音，或导入音频文件"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppTheme.pageBackground)
             } else {
                 List(selection: $selectedID) {
                     ForEach(recordings) { recording in
@@ -32,6 +34,8 @@ struct RecordingListView: View {
 #endif
                     }
                 }
+                .scrollContentBackground(.hidden)
+                .background(AppTheme.pageBackground)
             }
         }
         .navigationTitle("录音")

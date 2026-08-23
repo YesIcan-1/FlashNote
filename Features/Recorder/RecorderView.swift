@@ -106,7 +106,7 @@ struct RecorderView: View {
     private func controls(_ vm: RecorderViewModel) -> some View {
         HStack(spacing: 28) {
             if vm.phase == .recording {
-                IconButton(icon: AppIcons.pause, color: AppTheme.primaryText, background: AppTheme.background) {
+                IconButton(icon: AppIcons.pause, color: AppTheme.primaryText, background: AppTheme.background, showsBorder: true) {
                     vm.pause()
                 }
             } else if vm.phase == .paused {
@@ -133,6 +133,7 @@ struct IconButton: View {
     var color: Color = .white
     var background: Color = AppTheme.accent
     var size: CGFloat = 46
+    var showsBorder: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -145,5 +146,10 @@ struct IconButton: View {
                 .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
         }
         .buttonStyle(.plain)
+        .overlay {
+            if showsBorder {
+                Circle().stroke(AppTheme.border, lineWidth: 1)
+            }
+        }
     }
 }

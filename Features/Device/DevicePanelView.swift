@@ -216,6 +216,6 @@ func recordStateText(_ state: UInt8?) -> String {
     switch state { case 1: "录制中"; case 2: "未录制"; case 3: "已暂停"; default: "读取中" }
 }
 private func recordStateTone(_ state: UInt8?) -> StatusPill.Tone {
-    switch state { case 1: .destructive; case 3: .warning; case 2: .success; default: .neutral }
+    switch state { case 1: .destructive; case 3: .warning; case 2: .neutral; default: .neutral }
 }
 func displayDeviceFileSize(_ bytes: UInt32) -> String { ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) }

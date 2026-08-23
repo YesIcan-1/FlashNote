@@ -36,7 +36,11 @@ struct LiveTranscriptView: View {
                 withAnimation { proxy.scrollTo("partial", anchor: .bottom) }
             }
         }
-        .background(AppTheme.background.opacity(0.5))
+        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        }
     }
 }

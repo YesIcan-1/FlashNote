@@ -22,7 +22,7 @@ struct DesignSystemTests {
     }
 
     @Test func sharedSurfacesResolveToWhite() {
-        for surface in [AppTheme.pageBackground, AppTheme.cardBackground, AppTheme.elevatedSurface] {
+        for surface in [AppTheme.pageBackground, AppTheme.cardBackground, AppTheme.elevatedSurface, AppTheme.background] {
             let components = resolvedComponents(for: surface)
             #expect(abs(components.red - 1.0) < 0.001)
             #expect(abs(components.green - 1.0) < 0.001)
@@ -32,6 +32,19 @@ struct DesignSystemTests {
     }
 
     @Test func whiteSurfacesKeepDarkTextContrast() {
+        let textColors: [(color: Color, minimumRatio: CGFloat)] = [
+            (AppTheme.primaryText, 4.5),
+            (AppTheme.secondaryText, 4.5),
+            (AppTheme.tertiaryText, 3.0)
+        ]
+        for text in textColors {
+            let components = resolvedComponents(for: text.color)
+            #expect(components.alpha >= 0.99)
+            #expect(contrastRatio(for: components) >= text.minimumRatio)
+        }
+    }
+
+    @Test func whiteSurfacesKeepDarkTextComponents() {
         for textColor in [AppTheme.primaryText, AppTheme.secondaryText, AppTheme.tertiaryText] {
             let components = resolvedComponents(for: textColor)
             #expect(components.red < 0.60)
@@ -52,5 +65,19 @@ struct DesignSystemTests {
         UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
 #endif
         return (red, green, blue, alpha)
+    }
+
+    private func contrastRatio(for components: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat)) -> CGFloat {
+        let luminance = relativeLuminance(for: components)
+        return (1.0 + 0.05) / (luminance + 0.05)
+    }
+
+    private func relativeLuminance(for components: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat)) -> CGFloat {
+        func linearize(_ value: CGFloat) -> CGFloat {
+            value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linearize(components.red)
+            + 0.7152 * linearize(components.green)
+            + 0.0722 * linearize(components.blue)
     }
 }
