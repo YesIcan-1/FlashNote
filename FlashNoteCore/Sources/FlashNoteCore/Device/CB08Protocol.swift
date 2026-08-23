@@ -81,11 +81,14 @@ public struct CB08FileEntry: Equatable {
     public let time: UInt32
     public let size: UInt32
     public let name: String
+    /// 设备返回的原始 28 字节条目。删除设备文件时必须原样回传。
+    public let rawEntry: Data?
 
-    public init(time: UInt32, size: UInt32, name: String) {
+    public init(time: UInt32, size: UInt32, name: String, rawEntry: Data? = nil) {
         self.time = time
         self.size = size
         self.name = name
+        self.rawEntry = rawEntry
     }
 
     /// 下载候选名（参考官方实现）：先去尾部 "."（列表截断扩展名所致），
@@ -118,7 +121,8 @@ public enum CB08FileList {
             let nameRaw = body.subdata(in: (offset + 8)..<(offset + 28))
             let name = String(data: nameRaw, encoding: .utf8)?
                 .replacingOccurrences(of: "\u{0000}", with: "") ?? ""
-            entries.append(CB08FileEntry(time: time, size: size, name: name))
+            let rawEntry = body.subdata(in: offset..<(offset + 28))
+            entries.append(CB08FileEntry(time: time, size: size, name: name, rawEntry: rawEntry))
             offset += 28
         }
         return entries

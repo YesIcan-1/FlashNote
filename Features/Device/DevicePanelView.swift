@@ -6,6 +6,8 @@ import CoreBluetooth
 struct DevicePanelView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var isScanning = false
+    @State private var filePendingDeletion: CB08FileEntry?
+    @State private var showingDeleteConfirmation = false
 
     var body: some View {
         Group {
@@ -14,6 +16,15 @@ struct DevicePanelView: View {
         }
         .navigationTitle("录音笔")
         .task { environment?.startDeviceSession().onAppear() }
+        .alert("删除设备文件？", isPresented: $showingDeleteConfirmation) {
+            Button("删除", role: .destructive) {
+                if let filePendingDeletion { environment?.deviceSession?.deleteFile(filePendingDeletion) }
+                filePendingDeletion = nil
+            }
+            Button("取消", role: .cancel) { filePendingDeletion = nil }
+        } message: {
+            Text("将从录音笔中永久删除该文件，无法恢复。本地已下载的副本不会被删除。")
+        }
     }
 
     private func content(_ vm: DeviceViewModel) -> some View {
@@ -128,7 +139,16 @@ struct DevicePanelView: View {
                 Card(padding: 0) {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.files.enumerated()), id: \.offset) { index, file in
-                            DeviceFileRow(file: file, progress: vm.progress, statusText: vm.statusText) { vm.downloadAndTranscribe(file: file) }
+                            DeviceFileRow(
+                                file: file,
+                                progress: vm.progress,
+                                statusText: vm.statusText,
+                                download: { vm.downloadAndTranscribe(file: file) },
+                                delete: {
+                                    filePendingDeletion = file
+                                    showingDeleteConfirmation = true
+                                }
+                            )
                             if index < vm.files.count - 1 { Divider().padding(.leading, 18) }
                         }
                     }
@@ -172,13 +192,16 @@ private struct DeviceMetric: View {
 }
 
 private struct DeviceFileRow: View {
-    let file: CB08FileEntry; let progress: Double; let statusText: String; let download: () -> Void
+    let file: CB08FileEntry; let progress: Double; let statusText: String; let download: () -> Void; let delete: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 12) {
                 Image(systemName: "waveform").foregroundStyle(AppTheme.accent).frame(width: 28, height: 28).background(AppTheme.accentMuted, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) { Text(file.candidateNames.first ?? file.name).lineLimit(1); MetadataText(text: "\(displayDeviceFileSize(file.size)) · 设备录音") }
-                Spacer(); Button("下载并转写", action: download).buttonStyle(.bordered)
+                Spacer()
+                Button("下载并转写", action: download).buttonStyle(.bordered)
+                Button(role: .destructive, action: delete) { Image(systemName: AppIcons.delete) }
+                    .buttonStyle(.bordered).accessibilityLabel("删除设备文件")
             }
             if progress > 0 && progress < 1 { ProgressView(value: progress); Text(statusText).font(.caption).foregroundStyle(AppTheme.secondaryText) }
         }.padding(18)

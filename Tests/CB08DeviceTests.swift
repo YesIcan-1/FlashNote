@@ -121,6 +121,19 @@ struct CB08DeviceTests {
         #expect(version == "V1.0.0")
     }
 
+    @Test func deleteUsesOriginalDeviceFileEntry() {
+        let (device, transport) = makeDevice()
+        let rawEntry = entryBody(1).subdata(in: 4..<32)
+        let file = CB08FileEntry(time: 1, size: 100, name: "note1", rawEntry: rawEntry)
+
+        device.deleteFile(file)
+
+        let frame = frameOf(transport.wrote.last)
+        #expect(frame?.type == 2)
+        #expect(frame?.cmd == 8)
+        #expect(frame?.params == rawEntry)
+    }
+
     private func entryBody(_ n: Int) -> Data {
         var d = Data()
         d.append(contentsOf: [0,0,0,1])

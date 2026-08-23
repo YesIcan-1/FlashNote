@@ -21,6 +21,7 @@ final class DeviceViewModel {
     private(set) var statusText = "扫描以连接 CB08 录音笔"
     private(set) var progress: Double = 0
     private(set) var discovered: [CBPeripheral] = []
+    private(set) var deletingFileName: String?
 
     private let central: CB08Central
     private let store: RecordingStore
@@ -93,6 +94,16 @@ final class DeviceViewModel {
         }
     }
 
+    func deleteFile(_ file: CB08FileEntry) {
+        guard phase == .connected, let device else {
+            statusText = "设备未连接"
+            return
+        }
+        deletingFileName = file.candidateNames.first ?? file.name
+        statusText = "正在删除设备文件…"
+        device.deleteFile(file)
+    }
+
     func recordStart() { device?.recordStart() }
     func recordPause(paused: Bool) { device?.recordPause(paused: paused) }
     func recordSave() { device?.recordSave() }
@@ -122,6 +133,18 @@ final class DeviceViewModel {
             device.onFileList = { self.files = $0 }
             device.onFirmware = { self.firmware = $0 }
             device.onRecordState = { self.recordState = $0 }
+            device.onFileDeleteResult = { [weak self] code in
+                guard let self else { return }
+                self.deletingFileName = nil
+                if code == 0 {
+                    self.statusText = "设备文件已删除"
+                    self.device?.requestFileList()
+                } else if code == 0xFF {
+                    self.statusText = "设备文件缺少原始标识，无法安全删除"
+                } else {
+                    self.statusText = "删除失败（设备返回 \(code)）"
+                }
+            }
             let settings = AppSettings(storeDirectory: AppEnvironment.defaultStoreDirectory())
             self.transcription = DeviceTranscriptionService(
                 device: device,

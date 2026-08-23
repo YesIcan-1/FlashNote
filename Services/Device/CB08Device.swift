@@ -16,6 +16,7 @@ final class CB08Device {
     var onDownloadData: ((Data) -> Void)?      // 每收到一分片（含进度）
     var onDownloadComplete: ((Data, String) -> Void)?  // 完整文件 + 实际名
     var onDownloadCode: ((UInt8) -> Void)?     // 结束码
+    var onFileDeleteResult: ((UInt8) -> Void)?
 
     var onBattery: ((Int) -> Void)?
     var onFileList: (([CB08FileEntry]) -> Void)?
@@ -49,6 +50,13 @@ final class CB08Device {
         send(type: 2, cmd: 2, params: CB08Command.importRequest(offset: offset, filename: filename))
     }
     func abortImport() { send(type: 2, cmd: 7) }
+    func deleteFile(_ file: CB08FileEntry) {
+        guard let rawEntry = file.rawEntry, rawEntry.count == 28 else {
+            onFileDeleteResult?(0xFF)
+            return
+        }
+        send(type: 2, cmd: 8, params: rawEntry)
+    }
     func startRealtime() { send(type: 1, cmd: 0) }
     func stopRealtime() { send(type: 1, cmd: 2) }
     func realtimePause(paused: Bool) { send(type: 1, cmd: 3, params: Data([paused ? 1 : 0])) }
@@ -116,6 +124,8 @@ final class CB08Device {
             importingName = nil
         case 18:
             onFileList?(fileBuffer); fileBuffer = []
+        case 10:
+            onFileDeleteResult?(params.first ?? 0)
         default: break
         }
     }
