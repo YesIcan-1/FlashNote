@@ -9,17 +9,10 @@ import FlashNoteCore
 
 struct DesignSystemTests {
     @Test func accentColorMatchesProfessionalBlue() {
-        let color = AppTheme.accent
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-#if os(macOS)
-        let resolved = NSColor(color).usingColorSpace(.sRGB)!
-#else
-        let resolved = color
-#endif
-        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        #expect(abs(red - 0.039) < 0.01)
-        #expect(abs(green - 0.518) < 0.01)
-        #expect(abs(blue - 1.0) < 0.01)
+        let components = resolvedComponents(for: AppTheme.accent)
+        #expect(abs(components.red - 0.039) < 0.01)
+        #expect(abs(components.green - 0.518) < 0.01)
+        #expect(abs(components.blue - 1.0) < 0.01)
     }
 
     @Test func statusBadgeStyling() {
@@ -43,7 +36,7 @@ struct DesignSystemTests {
 #if os(macOS)
         NSColor(color).usingColorSpace(.sRGB)!.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
 #else
-        color.getRed(&red, green: &green, blue: &blue, opacity: &alpha)
+        UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
 #endif
         return (red, green, blue, alpha)
     }
