@@ -40,6 +40,10 @@ struct DesignSystemTests {
         }
     }
 
+    @Test func appUsesFixedLightAppearance() {
+        #expect(AppTheme.preferredColorScheme == .light)
+    }
+
     private func resolvedComponents(for color: Color) -> (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
 #if os(macOS)

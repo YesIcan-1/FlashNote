@@ -13,6 +13,7 @@ enum AppTheme {
     static let primaryText = Color(red: 0.10, green: 0.11, blue: 0.13)
     static let secondaryText = Color(red: 0.38, green: 0.40, blue: 0.44)
     static let tertiaryText = Color(red: 0.53, green: 0.55, blue: 0.59)
+    static let preferredColorScheme: ColorScheme = .light
     static let destructive = Color(red: 0.88, green: 0.20, blue: 0.23)
     static let warning = Color(red: 0.84, green: 0.49, blue: 0.08)
     static let success = Color(red: 0.10, green: 0.56, blue: 0.34)

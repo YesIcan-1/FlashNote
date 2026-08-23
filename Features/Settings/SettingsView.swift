@@ -1,7 +1,7 @@
 import SwiftUI
 import FlashNoteCore
 
-/// 设置页以产品分区组织，避免系统 Form 将外观、密钥和设备操作混在一处。
+/// 设置页以产品分区组织，避免系统 Form 将模型和设备操作混在一处。
 struct SettingsView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var settings: AppSettings?
@@ -23,7 +23,6 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
-                appearanceGroup(settings)
                 transcriptionGroup(settings)
                 minutesGroup(settings)
                 qwenGroup(settings)
@@ -38,17 +37,8 @@ struct SettingsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("设置").font(.system(size: 30, weight: .bold, design: .rounded))
-            Text("仅在这里管理外观、模型和设备偏好。不会要求本机密码。")
+            Text("仅在这里管理模型和设备偏好。不会要求本机密码。")
                 .font(.subheadline).foregroundStyle(AppTheme.secondaryText)
-        }
-    }
-
-    private func appearanceGroup(_ settings: AppSettings) -> some View {
-        SettingsGroup(title: "外观", subtitle: "选择 FlashNote 的显示方式", icon: "circle.lefthalf.filled") {
-            Picker("显示模式", selection: Binding(get: { settings.appearanceMode }, set: { settings.appearanceMode = $0 })) {
-                ForEach(AppearanceMode.allCases) { mode in Text(mode.displayName).tag(mode) }
-            }
-            .pickerStyle(.segmented).frame(maxWidth: 360)
         }
     }
 
