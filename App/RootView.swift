@@ -22,9 +22,9 @@ struct RootView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var recordings: [Recording] = []
     @State private var selection: UUID?
-    @State private var showingSettings = false
     @State private var sidebarItem: SidebarItem = .workbench
     @State private var mobileTab: MobileTab = .workbench
+    @State private var mobileRecordingPath: [UUID] = []
 
     var body: some View {
 #if os(macOS)
@@ -44,20 +44,16 @@ struct RootView: View {
             }
             .navigationTitle("FlashNote")
             .listStyle(.sidebar)
-            .toolbar {
-                ToolbarItem {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: AppIcons.settings)
-                    }
-                    .help("设置")
-                }
-            }
         } detail: {
             switch sidebarItem {
             case .workbench:
-                WorkbenchView { sidebarItem = .device }
+                WorkbenchView(
+                    openDevice: { sidebarItem = .device },
+                    openRecording: { id in
+                        selection = id
+                        sidebarItem = .recordings
+                    }
+                )
             case .recordings:
                 if let selection,
                    let recording = recordings.first(where: { $0.id == selection }) {
@@ -75,19 +71,23 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 1000, minHeight: 620)
+        .onAppear(perform: reloadRecordings)
         .onChange(of: selection) { _, _ in reloadRecordings() }
         .onChange(of: sidebarItem) { _, _ in reloadRecordings() }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-        }
 #else
         TabView(selection: $mobileTab) {
             NavigationStack {
-                WorkbenchView { mobileTab = .device }
+                WorkbenchView(
+                    openDevice: { mobileTab = .device },
+                    openRecording: { id in
+                        mobileTab = .recordings
+                        mobileRecordingPath = [id]
+                    }
+                )
             }
             .tabItem { Label("工作台", systemImage: AppIcons.home) }
             .tag(MobileTab.workbench)
-            NavigationStack {
+            NavigationStack(path: $mobileRecordingPath) {
                 RecordingListView(selectedID: $selection)
                     .navigationDestination(for: UUID.self) { id in
                         if let recording = recordings.first(where: { $0.id == id }) {
@@ -107,6 +107,7 @@ struct RootView: View {
                 .tabItem { Label("设置", systemImage: AppIcons.settings) }
                 .tag(MobileTab.settings)
         }
+        .onAppear(perform: reloadRecordings)
 #endif
     }
 

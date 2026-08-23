@@ -39,14 +39,98 @@ struct RecordingStatusView: View {
     }
 }
 
+/// 轻量状态胶囊，用于连接、下载和处理状态。
+struct StatusPill: View {
+    enum Tone {
+        case accent, success, warning, neutral, destructive
+
+        var foreground: Color {
+            switch self {
+            case .accent: AppTheme.accent
+            case .success: AppTheme.success
+            case .warning: AppTheme.warning
+            case .neutral: AppTheme.secondaryText
+            case .destructive: AppTheme.destructive
+            }
+        }
+
+        var background: Color {
+            switch self {
+            case .accent: AppTheme.infoBackground
+            case .success: AppTheme.successBackground
+            case .warning: AppTheme.warningBackground
+            case .neutral: AppTheme.elevatedSurface
+            case .destructive: AppTheme.destructive.opacity(0.14)
+            }
+        }
+    }
+
+    let title: String
+    var symbol: String?
+    var tone: Tone = .neutral
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            if let symbol { Image(systemName: symbol) }
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(tone.foreground)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(tone.background, in: Capsule())
+    }
+}
+
+struct SectionHeading<Trailing: View>: View {
+    let title: String
+    let subtitle: String?
+    @ViewBuilder let trailing: Trailing
+
+    init(_ title: String, subtitle: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .lastTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.title3.weight(.bold))
+                if let subtitle {
+                    Text(subtitle).font(.caption).foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+            Spacer(minLength: 8)
+            trailing
+        }
+    }
+}
+
+struct MetadataText: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(AppTheme.secondaryText)
+    }
+}
+
 /// 卡片容器。
 struct Card<Content: View>: View {
     @ViewBuilder let content: Content
+    var padding: CGFloat = 18
 
     var body: some View {
         content
-            .padding(14)
-            .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .shadow(color: .black.opacity(0.05), radius: 4, y: 1)
+            .padding(padding)
+            .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
+                    .stroke(AppTheme.border, lineWidth: 1)
+            }
+            .shadow(color: AppTheme.cardShadow, radius: 12, y: 4)
     }
 }

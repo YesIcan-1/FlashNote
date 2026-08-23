@@ -1,9 +1,18 @@
 import SwiftUI
 
-/// 设计语言：专业蓝（与 Assets 的 AccentColor 一致）。
+/// FlashNote 的语义化色板。所有页面只使用这些层级，系统浅/深色会自动适配。
 enum AppTheme {
-    static let accent = Color(red: 0.039, green: 0.518, blue: 1.0)          // #0A84FF
-    static let background = Color.primary.opacity(0.06)
+    // 保持现有品牌强调色；其余语义色只负责层级与主题适配。
+    static let accent = Color(red: 0.039, green: 0.518, blue: 1.0)
+    static let accentMuted = Color(red: 0.039, green: 0.518, blue: 1.0).opacity(0.12)
+    static let background = Color.primary.opacity(0.055)
+    static var pageBackground: Color {
+#if os(macOS)
+        Color(nsColor: .underPageBackgroundColor)
+#else
+        Color(uiColor: .systemGroupedBackground)
+#endif
+    }
     static var cardBackground: Color {
 #if os(macOS)
         Color(nsColor: .windowBackgroundColor)
@@ -11,10 +20,25 @@ enum AppTheme {
         Color(uiColor: .systemBackground)
 #endif
     }
+    static var elevatedSurface: Color {
+#if os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+#else
+        Color(uiColor: .secondarySystemBackground)
+#endif
+    }
+    static let border = Color.primary.opacity(0.10)
     static let primaryText = Color.primary
     static let secondaryText = Color.secondary
-    static let destructive = Color(red: 1.0, green: 0.231, blue: 0.188)     // #FF3B30
-    static let success = Color(red: 0.102, green: 0.62, blue: 0.361)        // #1A9E5C
-    static let successBackground = Color(red: 0.91, green: 0.969, blue: 0.933)
-    static let infoBackground = Color(red: 0.91, green: 0.945, blue: 1.0)
+    static let tertiaryText = Color.secondary.opacity(0.72)
+    static let destructive = Color(red: 0.88, green: 0.20, blue: 0.23)
+    static let warning = Color(red: 0.84, green: 0.49, blue: 0.08)
+    static let success = Color(red: 0.10, green: 0.56, blue: 0.34)
+    static let successBackground = Color(red: 0.10, green: 0.56, blue: 0.34).opacity(0.14)
+    static let infoBackground = Color(red: 0.039, green: 0.518, blue: 1.0).opacity(0.14)
+    static let warningBackground = Color(red: 0.84, green: 0.49, blue: 0.08).opacity(0.14)
+
+    static let cardCornerRadius: CGFloat = 20
+    static let compactCornerRadius: CGFloat = 13
+    static let cardShadow = Color.black.opacity(0.055)
 }
