@@ -31,6 +31,15 @@ struct DesignSystemTests {
         }
     }
 
+    @Test func whiteSurfacesKeepDarkTextContrast() {
+        for textColor in [AppTheme.primaryText, AppTheme.secondaryText, AppTheme.tertiaryText] {
+            let components = resolvedComponents(for: textColor)
+            #expect(components.red < 0.60)
+            #expect(components.green < 0.60)
+            #expect(components.blue < 0.60)
+        }
+    }
+
     private func resolvedComponents(for color: Color) -> (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
 #if os(macOS)

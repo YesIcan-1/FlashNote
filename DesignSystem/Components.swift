@@ -63,6 +63,13 @@ struct StatusPill: View {
             case .destructive: AppTheme.destructive.opacity(0.14)
             }
         }
+
+        var border: Color {
+            switch self {
+            case .neutral: AppTheme.border
+            case .accent, .success, .warning, .destructive: Color.clear
+            }
+        }
     }
 
     let title: String
@@ -80,6 +87,9 @@ struct StatusPill: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(tone.background, in: Capsule())
+        .overlay {
+            Capsule().stroke(tone.border, lineWidth: 1)
+        }
     }
 }
 

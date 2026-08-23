@@ -167,6 +167,10 @@ struct DevicePanelView: View {
         }
         .font(.subheadline.weight(.semibold)).padding(16)
         .background(AppTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: AppTheme.compactCornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppTheme.compactCornerRadius, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        }
     }
 
     private func phaseTone(_ phase: DeviceViewModel.Phase) -> StatusPill.Tone {
