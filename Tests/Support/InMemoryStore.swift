@@ -13,7 +13,11 @@ final class InMemoryStore: RecordingStore {
     }
     func fetchRecording(id: UUID) throws -> Recording? { recordings[id] }
     func upsertRecording(_ recording: Recording) throws { recordings[recording.id] = recording }
-    func deleteRecording(id: UUID) throws { recordings[id] = nil }
+    func deleteRecording(id: UUID) throws {
+        recordings[id] = nil
+        transcripts[id] = nil
+        minutes[id] = nil
+    }
     func fetchTranscript(recordingID: UUID) throws -> Transcript? { transcripts[recordingID] }
     func upsertTranscript(_ transcript: Transcript) throws { transcripts[transcript.recordingID] = transcript }
     func fetchMinutes(recordingID: UUID) throws -> [Minutes] { minutes[recordingID] ?? [] }

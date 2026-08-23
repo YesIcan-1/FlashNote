@@ -67,7 +67,26 @@ public final class FileRecordingStore: RecordingStore, @unchecked Sendable {
 
     public func deleteRecording(id: UUID) throws {
         lock.lock(); defer { lock.unlock() }
-        try FileManager.default.removeItem(at: url(kind: "recording", id: id))
+        let manager = FileManager.default
+        let recordingURL = url(kind: "recording", id: id)
+        if manager.fileExists(atPath: recordingURL.path) {
+            try manager.removeItem(at: recordingURL)
+        }
+
+        // 一条录音的全文与全部纪要都不再有入口，必须一并移除。
+        let transcriptURL = url(kind: "transcript", id: id)
+        if manager.fileExists(atPath: transcriptURL.path) {
+            try manager.removeItem(at: transcriptURL)
+        }
+        let files = try manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        for file in files where file.lastPathComponent.hasPrefix("minutes-") {
+            do {
+                let minutes = try decoder.decode(Minutes.self, from: Data(contentsOf: file))
+                if minutes.recordingID == id { try manager.removeItem(at: file) }
+            } catch {
+                throw StoreError.corrupted("minutes")
+            }
+        }
     }
 
     public func fetchTranscript(recordingID: UUID) throws -> Transcript? {

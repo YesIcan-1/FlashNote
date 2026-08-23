@@ -86,6 +86,25 @@ final class FileRecordingStoreTests {
         #expect(fetched.contains(second))
     }
 
+    @Test func deletingRecordingAlsoRemovesTranscriptAndMinutes() throws {
+        let rec = Recording(title: "要删除的录音")
+        try store.upsertRecording(rec)
+        try store.upsertTranscript(Transcript(recordingID: rec.id, segments: [TranscriptSegment(startTime: 0, text: "全文")]))
+        try store.upsertMinutes(Minutes(
+            recordingID: rec.id,
+            templateID: "builtin.work",
+            styleName: "工作纪要",
+            sections: [MinutesSection(title: "结论", body: "内容")],
+            model: "mock"
+        ))
+
+        try store.deleteRecording(id: rec.id)
+
+        #expect(try store.fetchRecording(id: rec.id) == nil)
+        #expect(try store.fetchTranscript(recordingID: rec.id) == nil)
+        #expect(try store.fetchMinutes(recordingID: rec.id).isEmpty)
+    }
+
     @Test func folderCRUD() throws {
         let folder = Folder(name: "工作")
         try store.upsertFolder(folder)
