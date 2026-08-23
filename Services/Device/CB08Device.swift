@@ -15,6 +15,8 @@ final class CB08Device {
     private var downloadingBuffer = Data()
     var onDownloadData: ((Data) -> Void)?      // 每收到一分片（含进度）
     var onDownloadComplete: ((Data, String) -> Void)?  // 完整文件 + 实际名
+    /// 面向大文件下载：只通知结束，不在协议层累计整个文件到内存。
+    var onDownloadFinished: ((String) -> Void)?
     var onDownloadCode: ((UInt8) -> Void)?     // 结束码
     var onFileDeleteResult: ((UInt8) -> Void)?
 
@@ -46,6 +48,7 @@ final class CB08Device {
     func requestFileList() { fileBuffer = []; send(type: 2, cmd: 0) }
     func requestImport(filename: String, offset: UInt32 = 0) {
         importingName = filename
+        // 仅兼容旧回调时才保留完整文件；流式调用方只使用 onDownloadData/onDownloadFinished。
         downloadingBuffer = Data()
         send(type: 2, cmd: 2, params: CB08Command.importRequest(offset: offset, filename: filename))
     }
@@ -111,7 +114,7 @@ final class CB08Device {
             // 开始导入：记录实际导入文件名
             importingName = String(data: params, encoding: .utf8) ?? importingName
         case 4:
-            downloadingBuffer.append(params)
+            if onDownloadComplete != nil { downloadingBuffer.append(params) }
             onDownloadData?(params)
         case 5:
             // 结束码：0完成 1不存在 2offset过大 3其他
@@ -119,6 +122,7 @@ final class CB08Device {
             onDownloadCode?(code)
             if code == 0, let name = importingName {
                 onDownloadComplete?(downloadingBuffer, name)
+                onDownloadFinished?(name)
             }
             downloadingBuffer = Data()
             importingName = nil

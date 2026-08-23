@@ -97,4 +97,29 @@ struct DeviceTranscriptionServiceTests {
         transport.onNotify?(frameData(type: 2, cmd: 5, params: Data([0])))
         _ = try await task.value
     }
+
+    @Test func interruptedDownloadResumesFromSavedOffset() async throws {
+        let (service, transport, store) = makeService(idleTimeoutNanoseconds: 20_000_000)
+        let file = CB08FileEntry(time: 99, size: 40, name: "resume")
+        let first = Task { try await service.downloadAndTranscribe(file: file, title: "resume") }
+        try await Task.sleep(nanoseconds: 10_000_000)
+        transport.onNotify?(frameData(type: 2, cmd: 4, params: Data(repeating: 1, count: 20)))
+        await #expect(throws: DeviceError.incompleteDownload) { try await first.value }
+
+        let second = Task { try await service.downloadAndTranscribe(file: file, title: "resume") }
+        try await Task.sleep(nanoseconds: 10_000_000)
+        var parser = CB08FrameParser()
+        let request = try #require(transport.wrote.last.flatMap { parser.feed($0).first })
+        #expect(request.type == 2)
+        #expect(request.cmd == 2)
+        let p = request.params
+        let offset = UInt32(p[0]) | (UInt32(p[1]) << 8) | (UInt32(p[2]) << 16) | (UInt32(p[3]) << 24)
+        #expect(offset == 20)
+        transport.onNotify?(frameData(type: 2, cmd: 3, params: Data("resume.wav".utf8)))
+        transport.onNotify?(frameData(type: 2, cmd: 4, params: Data(repeating: 2, count: 20)))
+        transport.onNotify?(frameData(type: 2, cmd: 5, params: Data([0])))
+
+        _ = try await second.value
+        #expect(try store.fetchRecordings().count == 1)
+    }
 }

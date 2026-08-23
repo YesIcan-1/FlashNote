@@ -88,6 +88,8 @@ final class DeviceViewModel {
             do {
                 let transcript = try await transcription.downloadAndTranscribe(file: file, title: file.name)
                 statusText = "已转写：\(transcript.fullText.count) 字"
+            } catch DeviceError.incompleteDownload {
+                statusText = "下载中断，已保留进度；重新点击即可从断点继续"
             } catch {
                 statusText = "失败：\(error.localizedDescription)"
             }
