@@ -5,29 +5,11 @@ enum AppTheme {
     // 保持现有品牌强调色；其余语义色只负责层级与主题适配。
     static let accent = Color(red: 0.039, green: 0.518, blue: 1.0)
     static let accentMuted = Color(red: 0.039, green: 0.518, blue: 1.0).opacity(0.12)
-    static let background = Color.primary.opacity(0.055)
-    static var pageBackground: Color {
-#if os(macOS)
-        Color(nsColor: .underPageBackgroundColor)
-#else
-        Color(uiColor: .systemGroupedBackground)
-#endif
-    }
-    static var cardBackground: Color {
-#if os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-#else
-        Color(uiColor: .systemBackground)
-#endif
-    }
-    static var elevatedSurface: Color {
-#if os(macOS)
-        Color(nsColor: .controlBackgroundColor)
-#else
-        Color(uiColor: .secondarySystemBackground)
-#endif
-    }
-    static let border = Color.primary.opacity(0.10)
+    static let pageBackground = Color.white
+    static let cardBackground = Color.white
+    static let elevatedSurface = Color.white
+    static let background = Color.black.opacity(0.045)
+    static let border = Color.black.opacity(0.075)
     static let primaryText = Color.primary
     static let secondaryText = Color.secondary
     static let tertiaryText = Color.secondary.opacity(0.72)
@@ -40,5 +22,5 @@ enum AppTheme {
 
     static let cardCornerRadius: CGFloat = 20
     static let compactCornerRadius: CGFloat = 13
-    static let cardShadow = Color.black.opacity(0.055)
+    static let cardShadow = Color.black.opacity(0.022)
 }

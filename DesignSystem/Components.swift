@@ -131,6 +131,6 @@ struct Card<Content: View>: View {
                 RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius, style: .continuous)
                     .stroke(AppTheme.border, lineWidth: 1)
             }
-            .shadow(color: AppTheme.cardShadow, radius: 12, y: 4)
+            .shadow(color: AppTheme.cardShadow, radius: 8, y: 2)
     }
 }
