@@ -14,12 +14,6 @@ enum TranscriptionEngineChoice: String, CaseIterable, Identifiable {
     }
 }
 
-enum AppearanceMode: String, CaseIterable, Identifiable {
-    case system, light, dark
-    var id: String { rawValue }
-    var displayName: String { switch self { case .system: "跟随系统"; case .light: "浅色"; case .dark: "深色" } }
-}
-
 /// API Key 存储抽象（Keychain 实现 / 测试内存实现）。
 protocol APIKeyStoring {
     func get(_ key: String) -> String?
@@ -66,11 +60,6 @@ final class AppSettings {
     var transcriptionEngine: TranscriptionEngineChoice {
         get { TranscriptionEngineChoice(rawValue: defaults.string(forKey: "transcriptionEngine") ?? "") ?? .cloudWhisper }
         set { defaults.set(newValue.rawValue, forKey: "transcriptionEngine") }
-    }
-
-    var appearanceMode: AppearanceMode {
-        get { AppearanceMode(rawValue: defaults.string(forKey: "appearanceMode") ?? "") ?? .system }
-        set { defaults.set(newValue.rawValue, forKey: "appearanceMode") }
     }
 
     var llmBaseURL: String {
