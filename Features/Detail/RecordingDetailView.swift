@@ -12,6 +12,8 @@ struct RecordingDetailView: View {
     @State private var minutesError: String?
     @State private var selectedTemplateID = MinutesTemplate.builtins[0].id
     @State private var player = AudioPlayer()
+    @State private var isRetranscribing = false
+    @State private var transcriptionError: String?
     @State private var showingDeleteConfirmation = false
     @State private var wasDeleted = false
     @State private var deletionError: String?
@@ -92,7 +94,11 @@ struct RecordingDetailView: View {
     private var transcriptPanel: some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeading("全文转写", subtitle: transcript.map { "\($0.segments.count) 段 · \($0.fullText.count) 字" } ?? "尚未生成") { EmptyView() }
+                SectionHeading("全文转写", subtitle: transcript.map { "\($0.segments.count) 段 · \($0.fullText.count) 字" } ?? "尚未生成") {
+                    Button(isRetranscribing ? "转写中…" : "重新转写") { retranscribe() }
+                        .buttonStyle(.borderless)
+                        .disabled(isRetranscribing || recording.audioFilename == nil)
+                }
                 if let transcript {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         ForEach(transcript.segments) { segment in
@@ -109,6 +115,7 @@ struct RecordingDetailView: View {
                             .font(.subheadline).foregroundStyle(AppTheme.secondaryText)
                     }.padding(.vertical, 22)
                 }
+                if let transcriptionError { Text(transcriptionError).font(.caption).foregroundStyle(AppTheme.destructive) }
             }
         }
     }
@@ -166,6 +173,22 @@ struct RecordingDetailView: View {
                 minutes = generated
             } catch { minutesError = "生成失败：\(error.localizedDescription)" }
             isGeneratingMinutes = false
+        }
+    }
+
+    private func retranscribe() {
+        guard let store = environment?.store else { return }
+        isRetranscribing = true; transcriptionError = nil
+        let settings = AppSettings(storeDirectory: AppEnvironment.defaultStoreDirectory())
+        let service = RecordingTranscriptionService(store: store, engine: FileTranscriptionEngineFactory.make(settings: settings))
+        Task {
+            do {
+                transcript = try await service.transcribe(recording)
+                loadMinutes()
+            } catch {
+                transcriptionError = "转写失败：\(error.localizedDescription)"
+            }
+            isRetranscribing = false
         }
     }
 
