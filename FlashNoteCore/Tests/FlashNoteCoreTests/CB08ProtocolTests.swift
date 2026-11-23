@@ -59,6 +59,8 @@ struct CB08ProtocolTests {
         #expect(entries[0].size == 100)
         #expect(entries[0].name.hasPrefix("note20260710"))
         #expect(entries[0].candidateNames == ["note20260710-162938.wav", "note20260710-162938.opus", "note20260710-162938"])
+        #expect(entries[0].displayName == "note20260710-162938")
+        #expect(entries[0].deletionFilename == "note20260710-162938.opus")
     }
 }
 

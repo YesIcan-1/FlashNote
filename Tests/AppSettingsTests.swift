@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Observation
 #if os(macOS)
 @testable import FlashNoteMac
 #else
@@ -19,8 +20,8 @@ struct AppSettingsTests {
                     defaults: UserDefaults(suiteName: "test-\(UUID().uuidString)")!)
     }
 
-    @Test func defaultEngineIsCloud() {
-        #expect(makeSettings().transcriptionEngine == .cloudWhisper)
+    @Test func defaultEngineUsesLocalModel() {
+        #expect(makeSettings().transcriptionEngine == .whisperKit)
     }
 
     @Test func engineRoundTrips() {
@@ -37,5 +38,50 @@ struct AppSettingsTests {
         #expect(s.llmBaseURL == "https://api.deepseek.com")
         #expect(s.llmModel == "deepseek-chat")
         #expect(s.llmAPIKey == "secret")
+    }
+
+    @Test func settingsChangesInvalidateObservers() {
+        let settings = makeSettings()
+        var changed = false
+        withObservationTracking {
+            _ = settings.llmAPIKey
+            _ = settings.llmModel
+        } onChange: {
+            changed = true
+        }
+        settings.llmAPIKey = "test-key"
+        #expect(changed)
+    }
+
+    @Test func selectingModelInvalidatesObserversImmediately() {
+        let settings = makeSettings()
+        var changed = false
+        withObservationTracking {
+            _ = settings.llmModel
+        } onChange: { changed = true }
+        settings.llmModel = "deepseek-v4-pro"
+        #expect(changed)
+        #expect(settings.llmModel == "deepseek-v4-pro")
+    }
+
+    @Test func providerPresetsAndKeysRemainIndependent() {
+        let settings = makeSettings()
+        #expect(settings.aiProvider == .deepSeek)
+        #expect(settings.llmBaseURL == AIProvider.deepSeek.defaultBaseURL)
+        #expect(settings.llmModel == AIProvider.deepSeek.defaultModel)
+        settings.llmAPIKey = "deepseek-key"
+        settings.aiProvider = .qwen
+        #expect(settings.llmBaseURL == AIProvider.qwen.defaultBaseURL)
+        #expect(settings.llmModel == AIProvider.qwen.defaultModel)
+        settings.llmAPIKey = "qwen-key"
+        settings.aiProvider = .deepSeek
+        #expect(settings.llmAPIKey == "deepseek-key")
+        settings.aiProvider = .qwen
+        #expect(settings.llmAPIKey == "qwen-key")
+    }
+
+    @Test func modelCatalogUsesProviderEndpoint() throws {
+        #expect(try ModelCatalog.modelsURL(baseURL: AIProvider.deepSeek.defaultBaseURL, provider: .deepSeek).absoluteString == "https://api.deepseek.com/models")
+        #expect(try ModelCatalog.modelsURL(baseURL: AIProvider.qwen.defaultBaseURL, provider: .qwen).absoluteString == "https://dashscope.aliyuncs.com/api/v1/models")
     }
 }

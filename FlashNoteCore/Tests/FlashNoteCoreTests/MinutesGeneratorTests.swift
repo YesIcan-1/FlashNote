@@ -3,13 +3,21 @@ import Testing
 @testable import FlashNoteCore
 
 /// 测试替身：按预设响应回复 complete；记录调用。
-final class MockLLMClient: LLMClient {
+final class MockLLMClient: LLMClient, @unchecked Sendable {
     let modelName = "mock-model"
     var onComplete: (([ChatMessage]) -> String)?
-    private(set) var calls: [[ChatMessage]] = []
+    private let lock = NSLock()
+    private var recordedCalls: [[ChatMessage]] = []
+    var calls: [[ChatMessage]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedCalls
+    }
 
     func complete(messages: [ChatMessage]) async throws -> String {
-        calls.append(messages)
+        lock.lock()
+        recordedCalls.append(messages)
+        lock.unlock()
         return onComplete?(messages) ?? ""
     }
 
@@ -21,8 +29,32 @@ final class MockLLMClient: LLMClient {
     }
 }
 
+private actor ParallelSummaryClient: LLMClient {
+    nonisolated let modelName = "parallel-mock"
+    private(set) var active = 0
+    private(set) var maximumActive = 0
+    private(set) var finalPrompt = ""
+
+    func complete(messages: [ChatMessage]) async throws -> String {
+        guard messages[0].content.contains("摘要") else {
+            finalPrompt = messages[1].content
+            return "## 结论\n已整理"
+        }
+        active += 1
+        maximumActive = max(maximumActive, active)
+        defer { active -= 1 }
+        try await Task.sleep(nanoseconds: 30_000_000)
+        return "摘要(\(messages[1].content))"
+    }
+
+    nonisolated func stream(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { $0.finish() }
+    }
+}
+
 struct MinutesGeneratorTests {
     private let recordingID = UUID()
+    private let workTemplate = MinutesTemplate.builtins.first { $0.id == "builtin.work" }!
 
     @Test func shortTranscriptSingleCallAndSections() async throws {
         let client = MockLLMClient()
@@ -45,7 +77,7 @@ struct MinutesGeneratorTests {
         let generator = MinutesGenerator(client: client)
         let minutes = try await generator.generate(
             transcript: "这是一段很短的转写。",
-            template: .builtins[0],
+            template: workTemplate,
             recordingID: recordingID
         )
         #expect(client.calls.count == 1)
@@ -108,12 +140,22 @@ struct MinutesGeneratorTests {
         )
         let minutes = try await generator.generate(
             transcript: longText,
-            template: .builtins[0],
+            template: workTemplate,
             recordingID: recordingID
         )
         // 分段调用 + 最终生成调用
         #expect(client.calls.count > 1)
         #expect(minutes.sections.count == 3)
+    }
+
+    @Test func longTranscriptSummariesRunConcurrentlyButStayInSourceOrder() async throws {
+        let client = ParallelSummaryClient()
+        _ = try await MinutesGenerator(client: client, chunker: TranscriptChunker(maxChars: 3)).generate(
+            transcript: "甲乙丙丁戊己庚辛壬癸", template: workTemplate, recordingID: recordingID
+        )
+        let prompt = await client.finalPrompt
+        #expect(await client.maximumActive == 3)
+        #expect(prompt.contains("摘要(甲乙丙)\n摘要(丁戊己)\n摘要(庚辛壬)\n摘要(癸)"))
     }
 
     @Test func missingSectionFilledEmpty() async throws {
@@ -122,7 +164,7 @@ struct MinutesGeneratorTests {
         let generator = MinutesGenerator(client: client)
         let minutes = try await generator.generate(
             transcript: "短文本。",
-            template: .builtins[0],
+            template: workTemplate,
             recordingID: recordingID
         )
         #expect(minutes.sections.count == 3)

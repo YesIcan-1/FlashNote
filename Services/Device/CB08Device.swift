@@ -19,6 +19,7 @@ final class CB08Device {
     var onDownloadFinished: ((String) -> Void)?
     var onDownloadCode: ((UInt8) -> Void)?     // 结束码
     var onFileDeleteResult: ((UInt8) -> Void)?
+    var onRecordCommandResult: ((UInt8, UInt8) -> Void)?
 
     var onBattery: ((Int) -> Void)?
     var onFileList: (([CB08FileEntry]) -> Void)?
@@ -38,6 +39,7 @@ final class CB08Device {
     }
 
     func send(type: UInt8, cmd: UInt8, params: Data = Data()) {
+        if type == 3 { deviceLogger.info("record TX cmd=\(cmd, privacy: .public)") }
         let frame = CB08Frame.build(seq: seqGenerator(), data: CB08Command.data(type: type, cmd: cmd, params: params))
         transport.write(frame)
     }
@@ -54,11 +56,16 @@ final class CB08Device {
     }
     func abortImport() { send(type: 2, cmd: 7) }
     func deleteFile(_ file: CB08FileEntry) {
-        guard let rawEntry = file.rawEntry, rawEntry.count == 28 else {
+        let filename = file.deletionFilename
+        guard !file.displayName.isEmpty, !filename.isEmpty else {
             onFileDeleteResult?(0xFF)
             return
         }
-        send(type: 2, cmd: 8, params: rawEntry)
+        // The vendor SDK reserves four bytes before the full filename.
+        // Omitting them produces a shorter frame that this firmware ignores.
+        var params = Data(repeating: 0, count: 4)
+        params.append(contentsOf: filename.utf8)
+        send(type: 2, cmd: 8, params: params)
     }
     func startRealtime() { send(type: 1, cmd: 0) }
     func stopRealtime() { send(type: 1, cmd: 2) }
@@ -81,7 +88,11 @@ final class CB08Device {
             case 2:
                 handleFile(type2cmd: frame.cmd, params: frame.params)
             case 3:
+                deviceLogger.info("record RX control cmd=\(frame.cmd ?? 255, privacy: .public) value=\(frame.params.first ?? 255, privacy: .public)")
                 if frame.cmd == 20 { frame.params.first.map { onRecordState?($0) } }
+                else if let cmd = frame.cmd, [2, 4, 6, 8].contains(cmd), let result = frame.params.first {
+                    onRecordCommandResult?(cmd, result)
+                }
             default: break
             }
         }
@@ -94,7 +105,11 @@ final class CB08Device {
                 if frame.cmd == 4, let value = frame.params.first { onBattery?(Int(value)) }
                 else if frame.cmd == 11 { onFirmware?(Self.trimmedText(frame.params)) }
             case 3:
+                deviceLogger.info("record RX event cmd=\(frame.cmd ?? 255, privacy: .public) value=\(frame.params.first ?? 255, privacy: .public)")
                 if frame.cmd == 20, let state = frame.params.first { onRecordState?(state) }
+                else if let cmd = frame.cmd, [2, 4, 6, 8].contains(cmd), let result = frame.params.first {
+                    onRecordCommandResult?(cmd, result)
+                }
             default: break
             }
         }
@@ -128,9 +143,10 @@ final class CB08Device {
             importingName = nil
         case 18:
             onFileList?(fileBuffer); fileBuffer = []
-        case 10:
+        case 13:
             onFileDeleteResult?(params.first ?? 0)
         default: break
         }
     }
+
 }

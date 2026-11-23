@@ -60,7 +60,7 @@ public struct MinutesGenerator {
     ) async throws -> Minutes {
         let prepared: String
         if transcript.count > chunker.maxChars {
-            prepared = try await summarizeChunks(transcript)
+            prepared = try await summarizeChunks(transcript, template: template)
         } else {
             prepared = transcript
         }
@@ -76,22 +76,51 @@ public struct MinutesGenerator {
             templateID: template.id,
             styleName: template.name,
             sections: sections,
-            model: client.modelName
+            model: client.modelName,
+            promptVersion: template.id == MinutesTemplate.defaultTemplate.id ? "2" : "1"
         )
     }
 
-    private func summarizeChunks(_ transcript: String) async throws -> String {
+    private func summarizeChunks(_ transcript: String, template: MinutesTemplate) async throws -> String {
         let chunks = chunker.chunk(transcript)
-        var summaries: [String] = []
-        for chunk in chunks {
-            let messages = [
-                ChatMessage(role: .system, content: "你是会议摘要助手。用简洁的中文要点概括以下转写片段，保留人名、数字与结论。"),
-                ChatMessage(role: .user, content: chunk)
-            ]
-            let summary = try await client.complete(messages: messages)
-            summaries.append(summary)
+        let instruction = template.id == MinutesTemplate.defaultTemplate.id
+            ? "你是严谨的会议记录员。按议题保留这段转写中的具体事实、数字、专有名词、不同观点、明确决定和待办；标明哪些只是建议或待确认。只根据原文，不添加推断。用中文分层要点概括，控制在 800 字以内。"
+            : "你是会议摘要助手。用简洁的中文要点概括以下转写片段，保留人名、数字与结论。"
+        var summaries = [String](repeating: "", count: chunks.count)
+        // 控制并发请求数，避免长录音把 AI 服务的限流和本机内存同时推高。
+        for start in stride(from: 0, to: chunks.count, by: 3) {
+            let end = min(start + 3, chunks.count)
+            let batch = try await withThrowingTaskGroup(of: (Int, String).self) { group in
+                for index in start..<end {
+                    let chunk = chunks[index]
+                    group.addTask {
+                        let messages = [
+                            ChatMessage(role: .system, content: instruction),
+                            ChatMessage(role: .user, content: chunk)
+                        ]
+                        return (index, try await Self.completeSummary(client: client, messages: messages))
+                    }
+                }
+                var results: [(Int, String)] = []
+                for try await result in group { results.append(result) }
+                return results
+            }
+            for (index, summary) in batch { summaries[index] = summary }
         }
         return summaries.joined(separator: "\n")
+    }
+
+    private static func completeSummary(client: any LLMClient, messages: [ChatMessage]) async throws -> String {
+        for attempt in 0..<3 {
+            do {
+                return try await client.complete(messages: messages)
+            } catch let error as LLMError {
+                guard case .httpStatus(let status) = error,
+                      [429, 500, 502, 503, 504].contains(status), attempt < 2 else { throw error }
+                try await Task.sleep(nanoseconds: UInt64(attempt + 1) * 500_000_000)
+            }
+        }
+        throw LLMError.invalidResponse
     }
 
     private func makeUserPrompt(template: MinutesTemplate, transcript: String) -> String {

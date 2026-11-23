@@ -1,7 +1,7 @@
 import SwiftUI
 import FlashNoteCore
 
-/// 状态徽章（录音中/已转写/已出纪要）。
+/// 状态徽章（待转写/已转写/已出纪要）。
 struct RecordingStatusView: View {
     let status: RecordingStatus
 
@@ -16,16 +16,16 @@ struct RecordingStatusView: View {
 
     static func title(for status: RecordingStatus) -> String {
         switch status {
-        case .recording: "录音中"
+        case .recording: "待转写"
         case .transcribed: "已转写"
-        case .summarized: "已出纪要"
+        case .summarized: "已转写"
         }
     }
 
     private var background: Color {
         switch status {
         case .recording: AppTheme.infoBackground
-        case .transcribed: AppTheme.successBackground
+        case .transcribed: AppTheme.infoBackground
         case .summarized: AppTheme.infoBackground
         }
     }
@@ -33,7 +33,7 @@ struct RecordingStatusView: View {
     private var foreground: Color {
         switch status {
         case .recording: AppTheme.accent
-        case .transcribed: AppTheme.success
+        case .transcribed: AppTheme.accent
         case .summarized: AppTheme.accent
         }
     }
@@ -125,6 +125,66 @@ struct MetadataText: View {
         Text(text)
             .font(.caption.monospacedDigit())
             .foregroundStyle(AppTheme.secondaryText)
+    }
+}
+
+struct TaskProgressRing: View {
+    let fraction: Double
+    let label: String
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(AppTheme.border, lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: min(1, max(0, fraction)))
+                .stroke(AppTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            if fraction <= 0 { ProgressView().controlSize(.mini) }
+            else { Text("\(Int(min(1, fraction) * 100))").font(.system(size: 9, weight: .semibold).monospacedDigit()) }
+        }
+        .frame(width: 34, height: 34)
+        .accessibilityLabel(label)
+        .accessibilityValue("\(Int(min(1, max(0, fraction)) * 100))%")
+        .help(label)
+    }
+}
+
+/// 文件卡片的状态直接围绕音频图标显示，完成后保留完整的蓝色细边框。
+struct RecordingProgressIcon: View {
+    let recording: Recording
+    let progress: ProcessingProgress?
+    var size: CGFloat = 48
+    var symbol = "waveform"
+
+    private var ringFraction: Double? {
+        if let progress {
+            if progress.stage == .completed { return 1 }
+            if progress.stage == .failed { return min(progress.fraction, 0.9) }
+            return progress.fraction
+        }
+        return recording.status == .recording ? nil : 1
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
+                .fill(AppTheme.accentMuted)
+                .frame(width: size - 8, height: size - 8)
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.38, weight: .medium))
+                .foregroundStyle(AppTheme.accent)
+            if let ringFraction {
+                RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
+                    .stroke(AppTheme.accent.opacity(0.16), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
+                    .trim(from: 0, to: max(0.02, min(1, ringFraction)))
+                    .stroke(AppTheme.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel(progress?.stage.rawValue ?? (ringFraction == nil ? "待转写" : "已转写"))
+        .accessibilityValue("\(Int((ringFraction ?? 0) * 100))%")
     }
 }
 

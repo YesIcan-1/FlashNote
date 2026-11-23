@@ -12,4 +12,10 @@ struct AudioPlayerTests {
         #expect(AudioPlayer.formatTime(65) == "01:05")
         #expect(AudioPlayer.formatTime(3725) == "01:02:05")
     }
+
+    @Test func seekingStaysWithinAudioBounds() {
+        #expect(AudioPlayer.clampedSeekTime(-10, duration: 173) == 0)
+        #expect(AudioPlayer.clampedSeekTime(50, duration: 173) == 50)
+        #expect(AudioPlayer.clampedSeekTime(180, duration: 173) == 173)
+    }
 }

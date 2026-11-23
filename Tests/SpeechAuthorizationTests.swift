@@ -8,6 +8,11 @@ import FlashNoteCore
 #endif
 
 struct SpeechAuthorizationTests {
+    @Test func missingSystemCallbackTimesOut() async {
+        let result: Bool? = await SpeechAuthorization.withCallbackTimeout(seconds: 0.01) { _ in }
+        #expect(result == nil)
+    }
+
     @Test func authorizedMapsToNil() {
         #expect(SpeechAuthorization.error(for: .authorized) == nil)
     }

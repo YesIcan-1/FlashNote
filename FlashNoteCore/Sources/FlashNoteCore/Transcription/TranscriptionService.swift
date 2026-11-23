@@ -20,6 +20,7 @@ public final class TranscriptionService {
     /// 每追加一个最终段落时回调（在锁内触发，调用方勿在回调中调用本服务方法以免死锁）。
     /// App 层用它做实时 UI 更新（如"最新一段高亮"）。
     public var onNewSegment: ((TranscriptSegment) -> Void)?
+    public var onEngineError: ((Error) -> Void)?
 
     public init(recordingID: UUID, engine: TranscriptionEngine, language: String = "zh-Hans") {
         self._transcript = Transcript(recordingID: recordingID, language: language)
@@ -68,6 +69,8 @@ public final class TranscriptionService {
     private func setLastError(_ error: Error) {
         lock.lock()
         _lastError = error
+        let onEngineError = onEngineError
         lock.unlock()
+        onEngineError?(error)
     }
 }

@@ -10,6 +10,7 @@ struct RecorderView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var viewModel: RecorderViewModel?
     @State private var errorMessage: String?
+    @AppStorage("liveTranscriptionLocale") private var liveTranscriptionLocale = "zh-CN"
 
     var body: some View {
         Group {
@@ -42,9 +43,12 @@ struct RecorderView: View {
                 errorMessage = "语音识别不可用"
                 return
             }
-            viewModel = vm
             do {
                 try vm.start()
+                viewModel = vm
+                if let id = vm.recordingID {
+                    environment?.processing.beginTranscription(id, title: vm.recordingTitle)
+                }
                 recorderLogger.info("recording started")
             } catch {
                 recorderLogger.error("start failed: \(String(describing: error), privacy: .public)")
@@ -55,7 +59,8 @@ struct RecorderView: View {
 
     private func makeViewModel() -> RecorderViewModel? {
         guard let env = environment else { return nil }
-        let engine = SpeechEngine() ?? SpeechEngine(locale: Locale(identifier: "en-US"))
+        let engine = SpeechEngine(locale: Locale(identifier: liveTranscriptionLocale))
+            ?? SpeechEngine(locale: Locale(identifier: "zh-CN"))
         guard let engine else { return nil }
         return RecorderViewModel(audio: AudioService(), engine: engine, store: env.store)
     }
@@ -76,14 +81,28 @@ struct RecorderView: View {
     }
 
     private func content(_ vm: RecorderViewModel) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             header(vm)
             WaveformView(level: vm.level)
             Text(RecorderViewModel.formatElapsed(vm.elapsed))
                 .font(.system(size: 40, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(AppTheme.primaryText)
+            HStack(spacing: 8) {
+                Label("实时转写", systemImage: "text.bubble")
+                Text("·")
+                Text(liveTranscriptionLocale == "en-US" ? "English" : "中文")
+                Spacer()
+                Text(vm.recordedBytes > 0
+                     ? "本机已保存 \(ByteCountFormatter.string(fromByteCount: vm.recordedBytes, countStyle: .file))"
+                     : "录音保存在本机")
+            }
+            .font(.caption).foregroundStyle(AppTheme.secondaryText)
             LiveTranscriptView(segments: vm.segments, partialText: vm.partialText)
+                .frame(minHeight: 190)
+            if let error = vm.errorMessage {
+                Text(error).font(.caption).foregroundStyle(AppTheme.destructive)
+            }
             controls(vm)
         }
         .padding(24)
@@ -104,24 +123,33 @@ struct RecorderView: View {
     }
 
     private func controls(_ vm: RecorderViewModel) -> some View {
-        HStack(spacing: 28) {
+        HStack(spacing: 18) {
             if vm.phase == .recording {
-                IconButton(icon: AppIcons.pause, color: AppTheme.primaryText, background: AppTheme.background, showsBorder: true) {
+                Button("暂停") {
                     vm.pause()
-                }
+                }.buttonStyle(.bordered)
             } else if vm.phase == .paused {
-                IconButton(icon: AppIcons.play, color: .white, background: AppTheme.accent) {
+                Button("继续") {
                     vm.resume()
+                }.buttonStyle(.bordered)
+            }
+            Spacer()
+            Button {
+                vm.stop()
+                if vm.errorMessage == nil {
+                    if let id = vm.recordingID, !vm.segments.isEmpty {
+                        environment?.processing.transcriptionCompleted(id)
+                        Task { await environment?.processing.generateAll(recordingID: id) }
+                    } else if let id = vm.recordingID {
+                        environment?.processing.transcriptionFailed(id, error: TranscriptionError.engineFailed("未识别到语音"))
+                    }
+                    dismiss()
+                } else if let id = vm.recordingID {
+                    environment?.processing.transcriptionFailed(id, error: TranscriptionError.engineFailed(vm.errorMessage ?? "录音保存失败"))
                 }
-            }
-            IconButton(icon: AppIcons.stop, color: .white, background: AppTheme.destructive, size: 52) {
-                vm.stop()
-                dismiss()
-            }
-            IconButton(icon: AppIcons.checkmark, color: .white, background: AppTheme.accent) {
-                vm.stop()
-                dismiss()
-            }
+            } label: { Label("完成录音", systemImage: AppIcons.checkmark) }
+                .buttonStyle(.borderedProminent)
+            if vm.phase == .idle { Button("关闭") { dismiss() }.buttonStyle(.bordered) }
         }
         .padding(.top, 4)
     }

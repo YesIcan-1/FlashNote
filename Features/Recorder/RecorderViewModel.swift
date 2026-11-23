@@ -17,6 +17,7 @@ final class RecorderViewModel {
 
     private(set) var phase: Phase = .idle
     private(set) var elapsed: TimeInterval = 0
+    private(set) var recordedBytes: Int64 = 0
     private(set) var level: Float = 0
     private(set) var segments: [TranscriptSegment] = []
     private(set) var partialText: String?
@@ -29,16 +30,17 @@ final class RecorderViewModel {
     private let store: RecordingStore
     private var service: TranscriptionService?
     private var timer: Timer?
+    private let now: () -> Date
+    private var activeStartedAt: Date?
+    private var completedDuration: TimeInterval = 0
 
-    init(audio: AudioRecording, engine: LiveTranscriptionEngine, store: RecordingStore) {
+    init(audio: AudioRecording, engine: LiveTranscriptionEngine, store: RecordingStore, now: @escaping () -> Date = Date.init) {
         self.audio = audio
         self.engine = engine
         self.store = store
+        self.now = now
         engine.onPartialText = { [weak self] text in
-            self?.partialText = text
-        }
-        engine.onError = { [weak self] _ in
-            self?.errorMessage = "转写引擎出错，请重试"
+            self?.updateOnMain { self?.partialText = text }
         }
     }
 
@@ -48,14 +50,23 @@ final class RecorderViewModel {
 
         let id = UUID()
         recordingID = id
+        recordingTitle = Self.hardwareStyleTitle(at: now())
         service = TranscriptionService(recordingID: id, engine: engine)
         service?.onNewSegment = { [weak self] segment in
-            self?.segments.append(segment)
-            self?.partialText = nil
+            self?.updateOnMain {
+                self?.segments.append(segment)
+                self?.partialText = nil
+            }
+        }
+        service?.onEngineError = { [weak self] _ in
+            self?.updateOnMain { self?.errorMessage = "转写引擎出错，请重试" }
         }
         segments = []
         partialText = nil
         elapsed = 0
+        recordedBytes = 0
+        completedDuration = 0
+        activeStartedAt = nil
 
         let fileURL = Self.recordingFileURL(for: id)
         do {
@@ -66,15 +77,36 @@ final class RecorderViewModel {
             phase = .idle
             throw error
         }
-        try service?.begin()
+        do {
+            try service?.begin()
+        } catch {
+            audio.stop()
+            engine.cancel()
+            try? FileManager.default.removeItem(at: fileURL)
+            service = nil
+            recordingID = nil
+            throw error
+        }
         recorderLogger.info("service began")
         phase = .recording
+        activeStartedAt = now()
         startTimer()
         wireAudio()
     }
 
+    static func hardwareStyleTitle(at date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "'note'yyyyMMdd-HHmmss"
+        return formatter.string(from: date)
+    }
+
     func pause() {
         guard phase == .recording else { return }
+        refreshElapsed()
+        completedDuration = elapsed
+        activeStartedAt = nil
         audio.pause()
         phase = .paused
     }
@@ -82,22 +114,33 @@ final class RecorderViewModel {
     func resume() {
         guard phase == .paused else { return }
         audio.resume()
+        activeStartedAt = now()
         phase = .recording
     }
 
     func stop() {
         guard phase != .idle else { return }
+        refreshElapsed()
         audio.stop()
         stopTimer()
+        let visiblePartial = partialText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        engine.finalizePending()
         engine.cancel()
         guard let service, let recordingID else { return }
 
-        let transcript = service.finish()
+        var transcript = service.finish()
+        // 系统识别器有时仅给出可见的临时文字，不提供任何分段；停止时仍须保存这些文字。
+        if transcript.segments.isEmpty, let visiblePartial, !visiblePartial.isEmpty {
+            let readableText = LiveTranscriptSegmenter.lines(visiblePartial).joined(separator: "\n")
+            transcript.append(TranscriptSegment(startTime: 0, endTime: elapsed, text: readableText))
+        }
         segments = transcript.segments
         var recording = Recording(id: recordingID, title: recordingTitle)
         recording.duration = elapsed
-        recording.audioFilename = "\(recordingID.uuidString).caf"
-        recording.markTranscribed()
+        recording.audioFilename = "\(recordingID.uuidString).m4a"
+        if !transcript.fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            recording.markTranscribed()
+        }
         do {
             try store.upsertRecording(recording)
             try store.upsertTranscript(transcript)
@@ -109,18 +152,30 @@ final class RecorderViewModel {
 
     private func wireAudio() {
         audio.onLevel = { [weak self] level in
-            self?.level = level
+            DispatchQueue.main.async { self?.level = level }
         }
         audio.onBuffer = { [weak self] buffer in
             self?.engine.append(buffer)
         }
     }
 
+    private func updateOnMain(_ update: () -> Void) {
+        if Thread.isMainThread { update() }
+        else { DispatchQueue.main.sync(execute: update) }
+    }
+
     private func startTimer() {
         timer?.invalidate()
-        let start = Date()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.elapsed = Date().timeIntervalSince(start)
+            self?.refreshElapsed()
+        }
+    }
+
+    func refreshElapsed() {
+        elapsed = completedDuration + (activeStartedAt.map { max(0, now().timeIntervalSince($0)) } ?? 0)
+        if let recordingID {
+            let url = Self.recordingFileURL(for: recordingID)
+            recordedBytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? recordedBytes
         }
     }
 
@@ -129,11 +184,11 @@ final class RecorderViewModel {
         timer = nil
     }
 
-    /// 录音文件位置：Application Support/FlashNote/audio/{id}.caf
+    /// 录音文件位置：Application Support/FlashNote/audio/{id}.m4a
     static func recordingFileURL(for id: UUID) -> URL {
         AppEnvironment.defaultStoreDirectory()
             .appendingPathComponent("audio", isDirectory: true)
-            .appendingPathComponent("\(id.uuidString).caf")
+            .appendingPathComponent("\(id.uuidString).m4a")
     }
 
     /// 秒 → "HH:MM:SS"。纯函数（可测）。

@@ -81,7 +81,7 @@ public struct CB08FileEntry: Equatable {
     public let time: UInt32
     public let size: UInt32
     public let name: String
-    /// 设备返回的原始 28 字节条目。删除设备文件时必须原样回传。
+    /// 设备返回的原始 28 字节条目，保留供协议诊断和旧固件兼容。
     public let rawEntry: Data?
 
     public init(time: UInt32, size: UInt32, name: String, rawEntry: Data? = nil) {
@@ -91,19 +91,32 @@ public struct CB08FileEntry: Equatable {
         self.rawEntry = rawEntry
     }
 
+    /// 列表里的扩展名可能被设备的 20 字节字段截断；显示时只用稳定的主文件名。
+    public var displayName: String {
+        var base = name.replacingOccurrences(of: "\u{0000}", with: "")
+        while base.hasSuffix(".") { base.removeLast() }
+        for ext in [".wav", ".opus", ".mp3"] where base.lowercased().hasSuffix(ext) {
+            base.removeLast(ext.count)
+            break
+        }
+        return base
+    }
+
     /// 下载候选名（参考官方实现）：先去尾部 "."（列表截断扩展名所致），
     /// 去掉已含扩展名，再拼 base.wav / base.opus / 原始名。
     public var candidateNames: [String] {
-        var base = name.replacingOccurrences(of: "\u{0000}", with: "")
-        while base.hasSuffix(".") { base.removeLast() }
-        for ext in [".wav", ".opus", ".mp3"] {
-            if base.lowercased().hasSuffix(ext) {
-                base.removeLast(ext.count)
-                break
-            }
-        }
+        let base = displayName
         let raw = name.replacingOccurrences(of: "\u{0000}", with: "")
         return [base + ".wav", base + ".opus", raw]
+    }
+
+    /// 厂商 SDK 的单文件删除命令发送完整文件名；列表的 20B 字段常截断 .opus 扩展名。
+    public var deletionFilename: String {
+        let raw = name.replacingOccurrences(of: "\u{0000}", with: "")
+        if [".opus", ".wav", ".mp3"].contains(where: { raw.lowercased().hasSuffix($0) }) {
+            return raw
+        }
+        return displayName + ".opus"
     }
 }
 

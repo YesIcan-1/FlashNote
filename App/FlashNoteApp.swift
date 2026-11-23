@@ -10,6 +10,10 @@ struct FlashNoteMacApp: App {
             RootView()
                 .environment(\.appEnvironment, environment)
                 .preferredColorScheme(AppTheme.preferredColorScheme)
+                .task {
+                    environment.startUSBSync()
+                    await AppNotificationService.shared.requestAuthorization()
+                }
         }
     }
 }

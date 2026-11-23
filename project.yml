@@ -8,6 +8,9 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.10"
+packages:
+  ArgmaxWhisperKit:
+    path: Vendor/ArgmaxWhisperKit
 targets:
   # FlashNoteCore 以 framework target 集成（XcodeGen 本地包引用在 Xcode 26.6 下
   # 多平台产物路径解析错误）。同一份 Sources 两个平台变体，模块名均为 FlashNoteCore。
@@ -20,6 +23,8 @@ targets:
       base:
         PRODUCT_NAME: FlashNoteCore
         PRODUCT_MODULE_NAME: FlashNoteCore
+        SDKROOT: iphoneos
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         MACH_O_TYPE: staticlib
         GENERATE_INFOPLIST_FILE: YES
         SKIP_INSTALL: YES
@@ -48,18 +53,25 @@ targets:
       - path: Resources
     dependencies:
       - target: FlashNoteCore
+      - package: ArgmaxWhisperKit
+        product: WhisperKit
       - framework: Vendor/Opus.xcframework
         embed: false
     settings:
       base:
+        ARCHS: arm64
         PRODUCT_BUNDLE_IDENTIFIER: com.flashnote.app
         PRODUCT_NAME: FlashNote
         PRODUCT_MODULE_NAME: FlashNote
+        # 显式声明双平台（真机 + 模拟器），避免 Xcode 27 推断 SUPPORTED_PLATFORMS 出错。
+        SDKROOT: iphoneos
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         ENABLE_TESTABILITY: YES
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 用于录制音频并实时转写
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: 用于实时语音转写
+        INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription: 用于将纪要中的待办事项加入本机日历
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic
@@ -75,8 +87,13 @@ targets:
     dependencies:
       - target: FlashNote
       - target: FlashNoteCore
+      - package: ArgmaxWhisperKit
+        product: WhisperKit
     settings:
       base:
+        ARCHS: arm64
+        SDKROOT: iphoneos
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         PRODUCT_NAME: FlashNoteTests
         PRODUCT_MODULE_NAME: FlashNoteTests
         GENERATE_INFOPLIST_FILE: YES
@@ -93,10 +110,13 @@ targets:
       - path: Resources
     dependencies:
       - target: FlashNoteCoreMac
+      - package: ArgmaxWhisperKit
+        product: WhisperKit
       - framework: Vendor/Opus.xcframework
         embed: false
     settings:
       base:
+        ARCHS: arm64
         PRODUCT_BUNDLE_IDENTIFIER: com.flashnote.mac
         PRODUCT_NAME: FlashNoteMac
         PRODUCT_MODULE_NAME: FlashNoteMac
@@ -116,8 +136,11 @@ targets:
     dependencies:
       - target: FlashNoteMac
       - target: FlashNoteCoreMac
+      - package: ArgmaxWhisperKit
+        product: WhisperKit
     settings:
       base:
+        ARCHS: arm64
         PRODUCT_NAME: FlashNoteMacTests
         PRODUCT_MODULE_NAME: FlashNoteMacTests
         GENERATE_INFOPLIST_FILE: YES

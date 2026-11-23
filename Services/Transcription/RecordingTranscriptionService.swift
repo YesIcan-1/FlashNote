@@ -22,7 +22,7 @@ final class RecordingTranscriptionService {
         let segments = try await engine.transcribe(audioFileURL: audioURL, language: language)
         let transcript = Transcript(recordingID: recording.id, segments: segments, language: language)
         try store.upsertTranscript(transcript)
-        var updated = recording
+        var updated = (try store.fetchRecording(id: recording.id)) ?? recording
         updated.markTranscribed()
         try store.upsertRecording(updated)
         return transcript

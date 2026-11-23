@@ -9,14 +9,17 @@ struct WorkbenchView: View {
     @State private var recordings: [Recording] = []
     @State private var showingRecorder = false
     @State private var showingImport = false
-    @State private var latestMinutesSummary: String?
+    @State private var pendingDeletion: Recording?
+    @State private var deletionError: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 header
+                #if os(macOS)
+                audioActions
+                #endif
                 resumeSection
-                minutesSection
                 recentSection
             }
             .padding(.horizontal, 28)
@@ -30,6 +33,11 @@ struct WorkbenchView: View {
         .onAppear(perform: reload)
         .onChange(of: showingRecorder) { _, showing in if !showing { reload() } }
         .onChange(of: showingImport) { _, showing in if !showing { reload() } }
+        .onChange(of: environment?.processing.revision) { _, _ in reload() }
+        .alert("删除本地录音？", isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } })) {
+            Button("删除", role: .destructive) { deletePendingRecording() }
+            Button("取消", role: .cancel) { pendingDeletion = nil }
+        } message: { Text("本机音频和转写将被删除；录音笔上的源文件会保留。") }
     }
 
     private var header: some View {
@@ -57,6 +65,55 @@ struct WorkbenchView: View {
         }
     }
 
+    #if os(macOS)
+    private var audioActions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("从声音开始").font(.title3.weight(.bold))
+            HStack(alignment: .top, spacing: 16) {
+                audioAction(
+                    title: "实时转写",
+                    subtitle: "录音时显示识别文字，完成后保存音频与全文。",
+                    icon: "waveform.badge.mic",
+                    actionTitle: "开始转写"
+                ) { showingRecorder = true }
+                audioAction(
+                    title: "导入音频",
+                    subtitle: "将已有录音加入文件库，按当前转写设置生成全文。",
+                    icon: "square.and.arrow.down",
+                    actionTitle: "选择文件"
+                ) { showingImport = true }
+            }
+        }
+    }
+
+    private func audioAction(
+        title: String,
+        subtitle: String,
+        icon: String,
+        actionTitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 18) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppTheme.primaryText)
+                    .frame(width: 46, height: 46)
+                    .background(AppTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 13))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.title3.weight(.bold)).foregroundStyle(AppTheme.primaryText)
+                    Text(subtitle).font(.subheadline).foregroundStyle(AppTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Button(actionTitle, action: action)
+                    .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity, minHeight: 152, alignment: .leading)
+        }
+    }
+    #endif
+
     @ViewBuilder
     private var devicePill: some View {
         if let session = environment?.deviceSession, session.phase == .connected {
@@ -77,17 +134,13 @@ struct WorkbenchView: View {
                 .buttonStyle(.borderless)
         }
         if let latest = recordings.first {
-            Button { openRecording(latest.id) } label: {
-                Card {
+            Card {
+                HStack {
+                    Button { openRecording(latest.id) } label: {
                     HStack(spacing: 18) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                .fill(AppTheme.accentMuted)
-                                .frame(width: 66, height: 66)
-                            Image(systemName: AppIcons.mic)
-                                .font(.title2.weight(.semibold))
-                                .foregroundStyle(AppTheme.accent)
-                        }
+                        RecordingProgressIcon(recording: latest,
+                            progress: environment?.processing.progress[latest.id],
+                            size: 66, symbol: AppIcons.mic)
                         VStack(alignment: .leading, spacing: 7) {
                             HStack(spacing: 8) {
                                 Text(latest.title)
@@ -108,9 +161,12 @@ struct WorkbenchView: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppTheme.tertiaryText)
                     }
+                    }.buttonStyle(.plain)
+                    Button(role: .destructive) { pendingDeletion = latest } label: {
+                        Image(systemName: AppIcons.delete)
+                    }.buttonStyle(.plain).accessibilityLabel("删除\(latest.title)")
                 }
             }
-            .buttonStyle(.plain)
         } else {
             Card {
                 HStack(spacing: 14) {
@@ -127,33 +183,6 @@ struct WorkbenchView: View {
                     Button("连接录音笔", action: openDevice).buttonStyle(.bordered)
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var minutesSection: some View {
-        if let latestMinutesSummary {
-            Button {
-                if let latest = recordings.first { openRecording(latest.id) }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: AppIcons.sparkle)
-                        .foregroundStyle(AppTheme.accent)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("AI 纪要已就绪").font(.subheadline.weight(.semibold))
-                        Text(latestMinutesSummary)
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
-                            .lineLimit(2)
-                    }
-                    Spacer()
-                    Image(systemName: "arrow.up.right")
-                        .foregroundStyle(AppTheme.secondaryText)
-                }
-                .padding(16)
-                .background(AppTheme.infoBackground, in: RoundedRectangle(cornerRadius: AppTheme.compactCornerRadius, style: .continuous))
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -177,11 +206,15 @@ struct WorkbenchView: View {
                 Card {
                     VStack(spacing: 0) {
                         ForEach(recordings.prefix(5)) { recording in
-                            Button { openRecording(recording.id) } label: {
-                                RecordingRow(recording: recording)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            HStack {
+                                Button { openRecording(recording.id) } label: {
+                                    RecordingRow(recording: recording)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }.buttonStyle(.plain)
+                                Button(role: .destructive) { pendingDeletion = recording } label: {
+                                    Image(systemName: AppIcons.delete)
+                                }.buttonStyle(.plain).accessibilityLabel("删除\(recording.title)")
                             }
-                            .buttonStyle(.plain)
                             if recording.id != recordings.prefix(5).last?.id { Divider() }
                         }
                     }
@@ -192,13 +225,13 @@ struct WorkbenchView: View {
 
     private func reload() {
         recordings = (try? environment?.store.fetchRecordings()) ?? []
-        latestMinutesSummary = recordings.lazy.compactMap { recording in
-            guard recording.status == .summarized,
-                  let minutes = try? environment?.store.fetchMinutes(recordingID: recording.id).last,
-                  let first = minutes.sections.first?.body,
-                  !first.isEmpty else { return nil }
-            return first
-        }.first
+    }
+
+    private func deletePendingRecording() {
+        guard let recording = pendingDeletion, let store = environment?.store else { return }
+        pendingDeletion = nil
+        do { try RecordingAssetService.delete(recording, from: store); reload() }
+        catch { deletionError = "删除失败：\(error.localizedDescription)" }
     }
 
     private var todayText: String {

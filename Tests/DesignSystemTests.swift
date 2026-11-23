@@ -16,19 +16,31 @@ struct DesignSystemTests {
     }
 
     @Test func statusBadgeStyling() {
-        #expect(RecordingStatusView.title(for: .recording) == "录音中")
+        #expect(RecordingStatusView.title(for: .recording) == "待转写")
         #expect(RecordingStatusView.title(for: .transcribed) == "已转写")
-        #expect(RecordingStatusView.title(for: .summarized) == "已出纪要")
+        #expect(RecordingStatusView.title(for: .summarized) == "已转写")
     }
 
-    @Test func sharedSurfacesResolveToWhite() {
+    @Test func surfacesKeepTheirVisualHierarchy() {
         for surface in [AppTheme.pageBackground, AppTheme.cardBackground, AppTheme.elevatedSurface, AppTheme.background] {
             let components = resolvedComponents(for: surface)
-            #expect(abs(components.red - 1.0) < 0.001)
-            #expect(abs(components.green - 1.0) < 0.001)
-            #expect(abs(components.blue - 1.0) < 0.001)
             #expect(abs(components.alpha - 1.0) < 0.001)
         }
+        let page = resolvedComponents(for: AppTheme.pageBackground)
+        let elevated = resolvedComponents(for: AppTheme.elevatedSurface)
+        let card = resolvedComponents(for: AppTheme.cardBackground)
+        #if os(macOS)
+        #expect(page.red < elevated.red)
+        #expect(page.green < elevated.green)
+        #expect(page.blue < elevated.blue)
+        #expect(elevated.red < card.red)
+        #expect(elevated.green < card.green)
+        #expect(elevated.blue < card.blue)
+        #else
+        #expect(abs(page.red - 1.0) < 0.001)
+        #expect(abs(elevated.red - 1.0) < 0.001)
+        #expect(abs(card.red - 1.0) < 0.001)
+        #endif
     }
 
     @Test func whiteSurfacesKeepDarkTextContrast() {

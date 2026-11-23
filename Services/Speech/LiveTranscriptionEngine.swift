@@ -8,4 +8,10 @@ protocol LiveTranscriptionEngine: TranscriptionEngine {
     var onPartialText: ((String?) -> Void)? { get set }
     /// 向识别器推送音频缓冲（由 AudioService 调用）。
     func append(_ buffer: AVAudioPCMBuffer)
+    /// 停止录音前把识别器已返回、但尚未标记为 final 的文字写入最终段落。
+    func finalizePending()
+}
+
+extension LiveTranscriptionEngine {
+    func finalizePending() {}
 }

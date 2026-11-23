@@ -101,6 +101,29 @@ struct CB08DeviceTests {
         #expect(state == 0)
     }
 
+    @Test func realtimeControlUsesFirmwareWorkingCommands() {
+        let (device, transport) = makeDevice()
+        device.startRealtime()
+        device.stopRealtime()
+        #expect(transport.wrote.count == 2)
+        #expect(frameOf(transport.wrote[0])?.data == Data([1, 0]))
+        #expect(frameOf(transport.wrote[1])?.data == Data([1, 2]))
+    }
+
+    @Test func realtimePauseUsesStreamControlCommand() {
+        let (device, transport) = makeDevice()
+        device.realtimePause(paused: true)
+        device.realtimePause(paused: false)
+        #expect(frameOf(transport.wrote[0])?.data == Data([1, 3, 1]))
+        #expect(frameOf(transport.wrote[1])?.data == Data([1, 3, 0]))
+    }
+
+    @Test func pollingDoesNotOverwriteRealtimePauseState() {
+        #expect(DeviceViewModel.displayedRecordState(reported: 1, streamPaused: true, streamActive: true) == 3)
+        #expect(DeviceViewModel.displayedRecordState(reported: 1, streamPaused: false, streamActive: true) == 1)
+        #expect(DeviceViewModel.displayedRecordState(reported: 2, streamPaused: true, streamActive: true) == 2)
+    }
+
     @Test func eventChannelPublishesRecordState() {
         let (device, transport) = makeDevice()
         var state: UInt8?
@@ -121,7 +144,7 @@ struct CB08DeviceTests {
         #expect(version == "V1.0.0")
     }
 
-    @Test func deleteUsesOriginalDeviceFileEntry() {
+    @Test func deleteUsesFullFilenameExpectedByVendorSDK() {
         let (device, transport) = makeDevice()
         let rawEntry = entryBody(1).subdata(in: 4..<32)
         let file = CB08FileEntry(time: 1, size: 100, name: "note1", rawEntry: rawEntry)
@@ -131,7 +154,24 @@ struct CB08DeviceTests {
         let frame = frameOf(transport.wrote.last)
         #expect(frame?.type == 2)
         #expect(frame?.cmd == 8)
-        #expect(frame?.params == rawEntry)
+        #expect(frame?.params == Data(repeating: 0, count: 4) + Data("note1.opus".utf8))
+    }
+
+    @Test func deleteHardwareStyleNameUsesSingle36ByteFrame() {
+        let (device, transport) = makeDevice()
+        device.deleteFile(CB08FileEntry(time: 1, size: 233_000, name: "note20261029-141159."))
+        #expect(transport.wrote.count == 1)
+        #expect(transport.wrote[0].count == 36)
+        #expect(frameOf(transport.wrote[0])?.params ==
+            Data(repeating: 0, count: 4) + Data("note20261029-141159.opus".utf8))
+    }
+
+    @Test func deleteResultUsesSingleFileResponseCommand() {
+        let (device, transport) = makeDevice()
+        var result: UInt8?
+        device.onFileDeleteResult = { result = $0 }
+        transport.onNotify?(frameData(type: 2, cmd: 13, params: Data([0])))
+        #expect(result == 0)
     }
 
     private func entryBody(_ n: Int) -> Data {

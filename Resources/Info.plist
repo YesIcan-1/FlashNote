@@ -28,5 +28,7 @@
 	<string>用于连接 QS668 录音笔并传输音频与文件</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>用于连接 QS668 录音笔并传输音频与文件</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>用于将纪要中的待办事项加入本机日历</string>
 </dict>
 </plist>

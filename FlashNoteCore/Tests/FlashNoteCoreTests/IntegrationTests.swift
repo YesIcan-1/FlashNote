@@ -28,7 +28,7 @@ struct IntegrationTests {
         }
         let minutes = try await MinutesGenerator(client: client).generate(
             transcript: transcript.fullText,
-            template: .builtins[0],
+            template: MinutesTemplate.builtins.first { $0.id == "builtin.work" }!,
             recordingID: recordingID
         )
         #expect(minutes.sections.count == 3)

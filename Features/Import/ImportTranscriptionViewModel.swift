@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import FlashNoteCore
 
 /// 导入 + 转写编排：拷贝文件到容器 → 建 Recording → 转写 → 保存 Transcript。
@@ -18,8 +19,9 @@ final class ImportTranscriptionViewModel {
 
     func recordings() -> [Recording] { cachedRecordings }
 
-    func importAndTranscribe(sourceURL: URL, title: String) async throws {
-        try await importAndTranscribe(sourceURL: sourceURL, title: title, language: "zh")
+    @discardableResult
+    func importAndTranscribe(sourceURL: URL, title: String, onCreated: ((UUID) -> Void)? = nil) async throws -> Recording {
+        try await importAndTranscribe(sourceURL: sourceURL, title: title, language: "zh", onCreated: onCreated)
     }
 
     /// 依次处理多个来源，避免同时调用云端转写造成顺序与资源不可控。
@@ -33,7 +35,8 @@ final class ImportTranscriptionViewModel {
         }
     }
 
-    private func importAndTranscribe(sourceURL: URL, title: String, language: String) async throws {
+    @discardableResult
+    private func importAndTranscribe(sourceURL: URL, title: String, language: String, onCreated: ((UUID) -> Void)? = nil) async throws -> Recording {
         let id = UUID()
         let audioDir = storeDirectory.appendingPathComponent("audio", isDirectory: true)
         try FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
@@ -43,7 +46,11 @@ final class ImportTranscriptionViewModel {
 
         var recording = Recording(id: id, title: title.isEmpty ? sourceURL.lastPathComponent : title)
         recording.audioFilename = destURL.lastPathComponent
+        if let audio = try? AVAudioFile(forReading: destURL), audio.processingFormat.sampleRate > 0 {
+            recording.duration = Double(audio.length) / audio.processingFormat.sampleRate
+        }
         try store.upsertRecording(recording)
+        onCreated?(id)
 
         if shouldFail {
             throw TranscriptionError.engineFailed("mock failure")
@@ -55,5 +62,6 @@ final class ImportTranscriptionViewModel {
         recording.markTranscribed()
         try store.upsertRecording(recording)
         cachedRecordings = (try? store.fetchRecordings()) ?? []
+        return recording
     }
 }

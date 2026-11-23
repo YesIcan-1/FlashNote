@@ -6,8 +6,10 @@ import CoreBluetooth
 struct DevicePanelView: View {
     @Environment(\.appEnvironment) private var environment
     @State private var isScanning = false
-    @State private var filePendingDeletion: CB08FileEntry?
+    @State private var filesPendingDeletion: [CB08FileEntry] = []
     @State private var showingDeleteConfirmation = false
+    @State private var selectingDeviceFiles = false
+    @State private var selectedDeviceNames: Set<String> = []
 
     var body: some View {
         Group {
@@ -18,12 +20,14 @@ struct DevicePanelView: View {
         .task { environment?.startDeviceSession().onAppear() }
         .alert("删除设备文件？", isPresented: $showingDeleteConfirmation) {
             Button("删除", role: .destructive) {
-                if let filePendingDeletion { environment?.deviceSession?.deleteFile(filePendingDeletion) }
-                filePendingDeletion = nil
+                environment?.deviceSession?.deleteFiles(filesPendingDeletion)
+                filesPendingDeletion = []
+                selectedDeviceNames = []
+                selectingDeviceFiles = false
             }
-            Button("取消", role: .cancel) { filePendingDeletion = nil }
+            Button("取消", role: .cancel) { filesPendingDeletion = [] }
         } message: {
-            Text("将从录音笔中永久删除该文件，无法恢复。本地已下载的副本不会被删除。")
+            Text("将从录音笔中永久删除所选 \(filesPendingDeletion.count) 个文件，无法恢复。本地已下载的副本不会被删除。")
         }
     }
 
@@ -56,6 +60,15 @@ struct DevicePanelView: View {
             }
             Spacer()
             StatusPill(title: vm.statusText, symbol: phaseSymbol(vm.phase), tone: phaseTone(vm.phase)).lineLimit(1)
+            if vm.phase == .connected {
+                Menu {
+                    Button("刷新设备信息") { vm.refreshInfo() }
+                    Button("断开连接", role: .destructive) { vm.disconnect() }
+                } label: {
+                    Label("高级设备操作", systemImage: "gearshape")
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -88,7 +101,7 @@ struct DevicePanelView: View {
 
     private func connectedContent(_ vm: DeviceViewModel) -> some View {
         VStack(alignment: .leading, spacing: 22) {
-            healthSection(vm); recordingSection(vm); filesSection(vm); advancedSection(vm)
+            healthSection(vm); recordingSection(vm); filesSection(vm)
         }
     }
 
@@ -110,20 +123,45 @@ struct DevicePanelView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("设备录音").font(.headline)
-                        Text("按键与 App 控制使用同一设备状态。")
+                        Text(vm.streamStartedRecording
+                             ? "这段录音由推流启动；停止推流也会保存并结束录音。"
+                             : "此固件从未录制状态开启推流会同时开始录音。")
                             .font(.caption).foregroundStyle(AppTheme.secondaryText)
                     }
                     Spacer()
                     StatusPill(title: recordStateText(vm.recordState), symbol: "record.circle", tone: recordStateTone(vm.recordState))
                 }
                 HStack(spacing: 10) {
-                    Button("开始录音") { vm.recordStart() }.buttonStyle(.borderedProminent).disabled(vm.recordState == 1)
+                    Button("开始录音") { vm.recordStart() }.buttonStyle(.borderedProminent)
+                        .disabled(vm.recordState == 1 || vm.isRealtimeActive || vm.isRealtimeStarting)
                     Button(vm.recordState == 3 ? "继续录音" : "暂停录音") { vm.recordPause(paused: vm.recordState != 3) }
                         .buttonStyle(.bordered).disabled(vm.recordState != 1 && vm.recordState != 3)
-                    Button("保存到设备") { vm.recordSave() }.buttonStyle(.bordered).disabled(vm.recordState != 1 && vm.recordState != 3)
+                    Button("停止并保存录音") { vm.recordSave() }.buttonStyle(.bordered)
+                        .disabled(vm.recordState != 1 && vm.recordState != 3 && !vm.isRealtimeActive)
                     Spacer()
-                    Button("开始实时推流") { vm.realtimeStart() }.buttonStyle(.bordered)
-                    Button("停止") { vm.realtimeStop() }.buttonStyle(.bordered)
+                    Button(vm.isRealtimeStarting ? "启动中…" : "开始实时推流") { vm.realtimeStart() }
+                        .buttonStyle(.bordered).disabled(vm.isRealtimeStarting || vm.isRealtimeActive)
+                    Button(vm.streamStartedRecording ? "结束推流与录音" : "停止推流") { vm.realtimeStop() }
+                        .buttonStyle(.bordered).disabled(!vm.isRealtimeActive)
+                }
+                HStack(spacing: 10) {
+                    Image(systemName: vm.isRealtimeActive ? "waveform" : "waveform.slash")
+                        .foregroundStyle(vm.isRealtimeActive ? AppTheme.accent : AppTheme.secondaryText)
+                    Text(vm.realtimeStatus)
+                    if vm.realtimePackets > 0 {
+                        Spacer()
+                        Text(RecorderViewModel.formatElapsed(vm.realtimeSeconds))
+                            .monospacedDigit()
+                    }
+                }
+                .font(.caption).foregroundStyle(AppTheme.secondaryText)
+                if let issue = vm.realtimeRecognitionIssue, vm.isRealtimeActive {
+                    Label(issue, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(AppTheme.warning)
+                }
+                if vm.isRealtimeActive {
+                    LiveTranscriptView(segments: vm.realtimeSegments, partialText: vm.realtimePartialText)
+                        .frame(minHeight: 150)
                 }
             }
         }
@@ -132,7 +170,24 @@ struct DevicePanelView: View {
     @ViewBuilder
     private func filesSection(_ vm: DeviceViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeading("设备文件", subtitle: "下载后会保存到本地文件，并进入同一录音详情") { Button("刷新文件") { vm.refreshInfo() }.buttonStyle(.borderless) }
+            SectionHeading("设备文件", subtitle: "这里显示设备内压缩大小；下载后保存的 WAV 大小可能明显增加") {
+                HStack(spacing: 10) {
+                    if selectingDeviceFiles {
+                        Text("已选 \(selectedDeviceNames.count) 个").font(.caption).foregroundStyle(AppTheme.secondaryText)
+                        Button("删除所选", role: .destructive) {
+                            filesPendingDeletion = vm.files.filter { selectedDeviceNames.contains($0.displayName) }
+                            showingDeleteConfirmation = !filesPendingDeletion.isEmpty
+                        }
+                        .disabled(selectedDeviceNames.isEmpty || vm.isDeletingFiles || vm.activeDownloadFile != nil)
+                    }
+                    Button(selectingDeviceFiles ? "完成" : "多选") {
+                        selectingDeviceFiles.toggle()
+                        selectedDeviceNames = []
+                    }
+                    .disabled(vm.files.isEmpty || vm.isDeletingFiles)
+                    Button("刷新文件") { vm.refreshInfo() }.buttonStyle(.borderless)
+                }
+            }
             if vm.files.isEmpty {
                 Card { HStack(spacing: 12) { Image(systemName: AppIcons.files).foregroundStyle(AppTheme.secondaryText); Text("设备暂无文件，或正在读取文件列表。").foregroundStyle(AppTheme.secondaryText); Spacer() } }
             } else {
@@ -141,11 +196,21 @@ struct DevicePanelView: View {
                         ForEach(Array(vm.files.enumerated()), id: \.offset) { index, file in
                             DeviceFileRow(
                                 file: file,
-                                progress: vm.progress,
+                                progress: vm.activeDownloadIndex == index ? vm.progress : 0,
                                 statusText: vm.statusText,
-                                download: { vm.downloadAndTranscribe(file: file) },
+                                isActive: vm.activeDownloadIndex == index,
+                                isDownloading: vm.activeDownloadFile != nil,
+                                isDownloaded: vm.isDownloaded(file),
+                                isSelecting: selectingDeviceFiles,
+                                isSelected: selectedDeviceNames.contains(file.displayName),
+                                toggleSelection: {
+                                    if !selectedDeviceNames.insert(file.displayName).inserted {
+                                        selectedDeviceNames.remove(file.displayName)
+                                    }
+                                },
+                                download: { vm.downloadAndTranscribe(file: file, index: index) },
                                 delete: {
-                                    filePendingDeletion = file
+                                    filesPendingDeletion = [file]
                                     showingDeleteConfirmation = true
                                 }
                             )
@@ -154,22 +219,6 @@ struct DevicePanelView: View {
                     }
                 }
             }
-        }
-    }
-
-    private func advancedSection(_ vm: DeviceViewModel) -> some View {
-        DisclosureGroup("高级设备操作") {
-            HStack {
-                Text("用于设备巡检或需要手动断开时使用。").font(.caption).foregroundStyle(AppTheme.secondaryText)
-                Spacer()
-                Button("断开连接", role: .destructive) { vm.disconnect() }.buttonStyle(.bordered)
-            }.padding(.top, 10)
-        }
-        .font(.subheadline.weight(.semibold)).padding(16)
-        .background(AppTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: AppTheme.compactCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.compactCornerRadius, style: .continuous)
-                .stroke(AppTheme.border, lineWidth: 1)
         }
     }
 
@@ -196,19 +245,31 @@ private struct DeviceMetric: View {
 }
 
 private struct DeviceFileRow: View {
-    let file: CB08FileEntry; let progress: Double; let statusText: String; let download: () -> Void; let delete: () -> Void
+    let file: CB08FileEntry; let progress: Double; let statusText: String; let isActive: Bool; let isDownloading: Bool; let isDownloaded: Bool
+    let isSelecting: Bool; let isSelected: Bool; let toggleSelection: () -> Void
+    let download: () -> Void; let delete: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 12) {
+                if isSelecting {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.secondaryText)
+                }
                 Image(systemName: "waveform").foregroundStyle(AppTheme.accent).frame(width: 28, height: 28).background(AppTheme.accentMuted, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) { Text(file.candidateNames.first ?? file.name).lineLimit(1); MetadataText(text: "\(displayDeviceFileSize(file.size)) · 设备录音") }
+                VStack(alignment: .leading, spacing: 3) { Text(file.displayName).lineLimit(1); MetadataText(text: "设备压缩文件 \(displayDeviceFileSize(file.size))") }
                 Spacer()
-                Button("下载并转写", action: download).buttonStyle(.bordered)
-                Button(role: .destructive, action: delete) { Image(systemName: AppIcons.delete) }
-                    .buttonStyle(.bordered).accessibilityLabel("删除设备文件")
+                if isDownloaded { Label("已下载", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(AppTheme.success) }
+                if isActive { TaskProgressRing(fraction: progress, label: statusText) }
+                if !isSelecting {
+                    Button("下载并转写", action: download).buttonStyle(.bordered).disabled(isDownloading)
+                    Button(role: .destructive, action: delete) { Image(systemName: AppIcons.delete) }
+                        .buttonStyle(.bordered).accessibilityLabel("删除设备文件").disabled(isDownloading)
+                }
             }
-            if progress > 0 && progress < 1 { ProgressView(value: progress); Text(statusText).font(.caption).foregroundStyle(AppTheme.secondaryText) }
-        }.padding(18)
+        }
+        .padding(18)
+        .contentShape(Rectangle())
+        .onTapGesture { if isSelecting { toggleSelection() } }
     }
 }
 
@@ -216,6 +277,6 @@ func recordStateText(_ state: UInt8?) -> String {
     switch state { case 1: "录制中"; case 2: "未录制"; case 3: "已暂停"; default: "读取中" }
 }
 private func recordStateTone(_ state: UInt8?) -> StatusPill.Tone {
-    switch state { case 1: .destructive; case 3: .warning; case 2: .neutral; default: .neutral }
+    switch state { case 1: .accent; case 3: .warning; case 2: .neutral; default: .neutral }
 }
 func displayDeviceFileSize(_ bytes: UInt32) -> String { ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) }

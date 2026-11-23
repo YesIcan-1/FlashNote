@@ -8,11 +8,15 @@ final class AudioPlayer {
     private(set) var isPlaying = false
     private(set) var duration: TimeInterval = 0
     private(set) var currentTime: TimeInterval = 0
+    private(set) var playbackRate: Float = 1
     private var timeObserver: Any?
 
-    func load(url: URL) {
+    func load(url: URL, fallbackDuration: TimeInterval = 0) {
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
+        isPlaying = false
+        currentTime = 0
+        duration = max(0, fallbackDuration)
         let seconds = item.asset.duration.seconds
         if seconds.isFinite && !seconds.isNaN {
             duration = seconds
@@ -26,7 +30,7 @@ final class AudioPlayer {
     }
 
     func play() {
-        player.play()
+        player.playImmediately(atRate: playbackRate)
         isPlaying = true
     }
 
@@ -40,6 +44,25 @@ final class AudioPlayer {
         player.seek(to: .zero)
         isPlaying = false
         currentTime = 0
+    }
+
+    func seek(to seconds: TimeInterval) {
+        let target = Self.clampedSeekTime(seconds, duration: duration)
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600))
+        currentTime = target
+    }
+
+    func skip(by seconds: TimeInterval) { seek(to: currentTime + seconds) }
+
+    func cyclePlaybackRate() {
+        let rates: [Float] = [1, 1.25, 1.5, 2]
+        let current = rates.firstIndex(of: playbackRate) ?? 0
+        playbackRate = rates[(current + 1) % rates.count]
+        if isPlaying { player.rate = playbackRate }
+    }
+
+    static func clampedSeekTime(_ seconds: TimeInterval, duration: TimeInterval) -> TimeInterval {
+        max(0, min(seconds, max(0, duration)))
     }
 
     deinit {

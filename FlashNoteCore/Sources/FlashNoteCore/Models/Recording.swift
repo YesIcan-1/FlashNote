@@ -13,6 +13,7 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
     public var title: String
     public var folderID: UUID?
     public var audioFilename: String?
+    public var sourceDeviceName: String?
     public var duration: TimeInterval
     public var status: RecordingStatus
     public var createdAt: Date
@@ -23,6 +24,7 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
         title: String,
         folderID: UUID? = nil,
         audioFilename: String? = nil,
+        sourceDeviceName: String? = nil,
         duration: TimeInterval = 0,
         status: RecordingStatus = .recording,
         createdAt: Date = Date(),
@@ -32,6 +34,7 @@ public struct Recording: Codable, Identifiable, Equatable, Sendable {
         self.title = title
         self.folderID = folderID
         self.audioFilename = audioFilename
+        self.sourceDeviceName = sourceDeviceName
         self.duration = duration
         self.status = status
         self.createdAt = createdAt

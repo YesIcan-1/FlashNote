@@ -59,13 +59,13 @@ struct RootView: View {
             case .recordings:
                 if let selection,
                    let recording = recordings.first(where: { $0.id == selection }) {
-                    RecordingDetailView(recording: recording)
+                    RecordingDetailView(recording: recording, onClose: { self.selection = nil })
                         .id(recording.id)
                 } else {
                     RecordingListView(selectedID: $selection)
                 }
             case .files:
-                FileCenterView()
+                FileCenterView(openDevice: { sidebarItem = .device })
             case .device:
                 DevicePanelView()
             case .settings:
@@ -92,14 +92,14 @@ struct RootView: View {
             NavigationStack(path: $mobileRecordingPath) {
                 RecordingListView(selectedID: $selection)
                     .navigationDestination(for: UUID.self) { id in
-                        if let recording = recordings.first(where: { $0.id == id }) {
+                        if let recording = try? environment?.store.fetchRecording(id: id) {
                             RecordingDetailView(recording: recording)
                         }
                     }
             }
             .tabItem { Label("录音库", systemImage: AppIcons.mic) }
             .tag(MobileTab.recordings)
-            NavigationStack { FileCenterView() }
+            NavigationStack { FileCenterView(openDevice: { mobileTab = .device }) }
                 .tabItem { Label("文件", systemImage: AppIcons.files) }
                 .tag(MobileTab.files)
             DevicePanelView()
