@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hans</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于录制音频并实时转写</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>用于实时语音转写</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>用于连接 QS668 录音笔并传输音频与文件</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>用于连接 QS668 录音笔并传输音频与文件</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>用于将纪要中的待办事项加入本机日历</string>
+</dict>
+</plist>

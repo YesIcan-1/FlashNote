@@ -1,0 +1,92 @@
+<html style="margin:0;padding:0;">
+<title>FlashNote 重构：听记信息架构与闭环</title>
+<div style="width:100%;box-sizing:border-box;background:#faf9fc;color:#1f2430;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;padding:20px 18px 26px;">
+  <div style="border-left:4px solid #6c5ce7;padding:2px 0 2px 14px;margin-bottom:16px;">
+    <div style="font-size:20px;font-weight:700;color:#222;">FlashNote 重构方案（参考 QwenNote 界面逻辑）</div>
+    <div style="font-size:13px;color:#6b7280;margin-top:3px;">核心对象从「录音文件」迁移为「听记笔记」 · 三大能力链自动闭环</div>
+  </div>
+
+  <div style="font-size:14px;font-weight:600;color:#6c5ce7;margin:6px 0 10px;">① 双端入口 · 一级对象 = 听记</div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:20px;">
+    <div style="flex:1 1 300px;min-width:280px;background:#fff;border:1px solid #e6e3f0;border-radius:12px;padding:12px 14px;">
+      <div style="font-size:13px;font-weight:600;color:#444;margin-bottom:8px;">macOS 侧边栏</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="background:#6c5ce7;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;">🏠 听记 · 时间线首页</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">🎧 全部听记</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">📁 文件</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">🎙 录音笔 · 同步中心</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">⚙️ 设置</span>
+      </div>
+    </div>
+    <div style="flex:1 1 300px;min-width:280px;background:#fff;border:1px solid #e6e3f0;border-radius:12px;padding:12px 14px;">
+      <div style="font-size:13px;font-weight:600;color:#444;margin-bottom:8px;">iOS 底部 Tab（录音按钮常驻）</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="background:#6c5ce7;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;">听记</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">录音库</span>
+        <span style="background:#fff;border:1.5px solid #6c5ce7;color:#6c5ce7;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;">● 一键听记（悬浮）</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">录音笔</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">文件</span>
+        <span style="background:#f1effc;color:#3b2f8f;font-size:12px;padding:4px 10px;border-radius:999px;">我的</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:14px;font-weight:600;color:#6c5ce7;margin:6px 0 10px;">② 听记闭环 · 从「记录」到「动作」全链路</div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin-bottom:8px;">
+
+    <div style="flex:1 1 150px;min-width:140px;background:#fff;border:1px solid #e6e3f0;border-top:3px solid #8b5cf6;border-radius:12px;padding:10px 12px;">
+      <div style="font-size:15px;font-weight:700;color:#222;">1 记录</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">硬件(CB08/A2) 或 App 直接录音</div>
+      <div style="margin-top:6px;"><span style="font-size:11px;background:#eef2ff;color:#4f46e5;padding:2px 8px;border-radius:999px;">P0 全屏听记页</span></div>
+    </div>
+    <div style="align-self:center;color:#c4b5fd;font-size:18px;font-weight:700;">→</div>
+
+    <div style="flex:1 1 170px;min-width:150px;background:#fff;border:1px solid #e6e3f0;border-top:3px solid #8b5cf6;border-radius:12px;padding:10px 12px;">
+      <div style="font-size:15px;font-weight:700;color:#222;">2 传输</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">USB 直读主通道(约30MB/s) · BLE 无线/实时 · 本地导入</div>
+      <div style="margin-top:6px;"><span style="font-size:11px;background:#eef2ff;color:#4f46e5;padding:2px 8px;border-radius:999px;">P0 USB 自动同步</span> <span style="font-size:11px;background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:999px;">P1 iOS BLE 优化</span></div>
+    </div>
+    <div style="align-self:center;color:#c4b5fd;font-size:18px;font-weight:700;">→</div>
+
+    <div style="flex:1 1 170px;min-width:150px;background:#fff;border:1px solid #e6e3f0;border-top:3px solid #8b5cf6;border-radius:12px;padding:10px 12px;">
+      <div style="font-size:15px;font-weight:700;color:#222;">3 实时转写</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">语种切换 · 人工纠错 · AI 边听边修 · 说话人分离</div>
+      <div style="margin-top:6px;"><span style="font-size:11px;background:#eef2ff;color:#4f46e5;padding:2px 8px;border-radius:999px;">P0 切换/纠错</span> <span style="font-size:11px;background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:999px;">P1 修词/分离</span></div>
+    </div>
+    <div style="align-self:center;color:#c4b5fd;font-size:18px;font-weight:700;">→</div>
+
+    <div style="flex:1 1 160px;min-width:145px;background:#fff;border:1px solid #e6e3f0;border-top:3px solid #8b5cf6;border-radius:12px;padding:10px 12px;">
+      <div style="font-size:15px;font-weight:700;color:#222;">4 自动归档</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">AI 标题 + 摘要 · 无痕模式转后即焚</div>
+      <div style="margin-top:6px;"><span style="font-size:11px;background:#eef2ff;color:#4f46e5;padding:2px 8px;border-radius:999px;">P0 无痕/归档</span></div>
+    </div>
+    <div style="align-self:center;color:#c4b5fd;font-size:18px;font-weight:700;">→</div>
+
+    <div style="flex:1 1 170px;min-width:150px;background:#fff;border:1px solid #e6e3f0;border-top:3px solid #8b5cf6;border-radius:12px;padding:10px 12px;">
+      <div style="font-size:15px;font-weight:700;color:#222;">5 三视图呈现</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">原文 / 大纲(时间轴) / 纪要 一键切换</div>
+      <div style="margin-top:6px;"><span style="font-size:11px;background:#eef2ff;color:#4f46e5;padding:2px 8px;border-radius:999px;">P0 三视图</span> <span style="font-size:11px;background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:999px;">P1 大纲跳转</span></div>
+    </div>
+    <div style="align-self:center;color:#c4b5fd;font-size:18px;font-weight:700;">→</div>
+
+    <div style="flex:1 1 170px;min-width:150px;background:#fff;border:1px solid #e6e3f0;border-top:3px solid #8b5cf6;border-radius:12px;padding:10px 12px;">
+      <div style="font-size:15px;font-weight:700;color:#222;">6 AI 产出</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">待办清单 · AI 问答 · 快捷指令(周报/进展)</div>
+      <div style="margin-top:6px;"><span style="font-size:11px;background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:999px;">P1 问答/指令</span> <span style="font-size:11px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:999px;">P2 周报聚合</span></div>
+    </div>
+    <div style="align-self:center;color:#c4b5fd;font-size:18px;font-weight:700;">→</div>
+
+    <div style="flex:1 1 150px;min-width:140px;background:#fff;border:1px solid #e6e3f0;border-top:3px solid #8b5cf6;border-radius:12px;padding:10px 12px;">
+      <div style="font-size:15px;font-weight:700;color:#222;">7 动作出口</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">导出 txt/md/音频 · 分享 · 系统提醒/日历</div>
+      <div style="margin-top:6px;"><span style="font-size:11px;background:#eef2ff;color:#4f46e5;padding:2px 8px;border-radius:999px;">P0 导出</span> <span style="font-size:11px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:999px;">P2 提醒/日历</span></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;font-size:12px;color:#6b7280;">
+    <span style="background:#eef2ff;color:#4f46e5;padding:3px 10px;border-radius:999px;">P0 · 1–2 周 · 界面架构 + USB 自动同步 + 可用性补全</span>
+    <span style="background:#fef3c7;color:#b45309;padding:3px 10px;border-radius:999px;">P1 · 3–4 周 · iOS BLE 优化 + 大纲 + 问答 + 本地引擎</span>
+    <span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:999px;">P2 · 5–8 周 · 云同步 + 周报 + 实时增量（Wi-Fi/声纹需硬件升级）</span>
+  </div>
+</div>
+</html>

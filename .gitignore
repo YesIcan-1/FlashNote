@@ -1,0 +1,7 @@
+.superpowers/
+.planning/
+.DS_Store
+build/
+DerivedData/
+
+FlashNote.xcodeproj/
